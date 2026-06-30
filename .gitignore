@@ -1,0 +1,10 @@
+# Local persistence — quotes saved by the running app (single-machine SQLite).
+quotes.db
+quotes.db-journal
+quotes.db-wal
+quotes.db-shm
+
+# Dependencies (the app itself needs none; this is only for transient tooling)
+node_modules/
+package-lock.json
+npm-debug.log*
