@@ -4,11 +4,13 @@
 'use strict';
 const P = window.Pricing;
 
-// --- Internal passcode gate -------------------------------------------------
-// Deliberately client-side and trivial. See README + the in-UI warning copy:
-// this is a deterrent against over-the-shoulder viewing, NOT real security.
-const INTERNAL_PASSCODE = 'sunstone';
-let internalUnlocked = false;
+// --- Presentation mode ------------------------------------------------------
+// The REAL access gate is the server-side site login (see server.js / functions/).
+// Everyone in the app is authenticated internal staff, so margins are visible by
+// default. "Presentation mode" is purely an on-screen over-the-shoulder deterrent
+// for client meetings: it hides the Internal Margin tab and forces the Quote view.
+// It is NOT security — it changes nothing about what the server sends.
+let presentationMode = false;
 
 const fmt = (n, dp = 2) =>
   (n === '' || n === null || n === undefined || Number.isNaN(n)) ? '—'
@@ -53,7 +55,7 @@ function renderAll() {
   renderImplementation();
   renderRental();
   renderQuote();
-  if (internalUnlocked) renderMargin();
+  renderMargin();
 }
 
 // --- SUBSCRIPTION -----------------------------------------------------------
@@ -386,7 +388,6 @@ function wireInputs() {
   // Tabs
   document.querySelectorAll('.tab').forEach((t) => {
     t.addEventListener('click', () => {
-      if (t.dataset.tab === 'margin' && !internalUnlocked) { /* still show locked panel */ }
       document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
       document.querySelectorAll('.panel').forEach((x) => x.classList.remove('active'));
       t.classList.add('active');
@@ -394,30 +395,33 @@ function wireInputs() {
     });
   });
 
-  // Internal gate
-  document.getElementById('btn-internal').addEventListener('click', () => {
-    document.querySelector('.tab[data-tab="margin"]').click();
-    document.getElementById('gate-pass').focus();
+  // Presentation mode toggle (on-screen deterrent only — see comment at top).
+  document.getElementById('btn-present').addEventListener('click', () => setPresentationMode(!presentationMode));
+
+  // Sign out
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+    location.href = '/login';
   });
-  document.getElementById('gate-submit').addEventListener('click', tryUnlock);
-  document.getElementById('gate-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryUnlock(); });
 }
 
-function tryUnlock() {
-  const val = document.getElementById('gate-pass').value;
-  const msg = document.getElementById('gate-msg');
-  if (val === INTERNAL_PASSCODE) {
-    internalUnlocked = true;
-    document.getElementById('margin-locked').classList.add('hidden');
-    document.getElementById('margin-content').classList.remove('hidden');
-    document.getElementById('tab-margin').classList.remove('locked');
-    document.getElementById('tab-margin').classList.add('unlocked');
-    document.getElementById('tab-margin').textContent = 'Internal Margin 🔓';
-    const badge = document.getElementById('view-badge');
-    badge.textContent = 'INTERNAL VIEW'; badge.className = 'view-badge internal';
-    renderMargin();
+function setPresentationMode(on) {
+  presentationMode = on;
+  const tab = document.getElementById('tab-margin');
+  const badge = document.getElementById('view-badge');
+  const btn = document.getElementById('btn-present');
+  if (on) {
+    tab.classList.add('hidden');
+    // If currently viewing the internal margin tab, bounce to the client Quote.
+    if (document.querySelector('.tab[data-tab="margin"]').classList.contains('active')) {
+      document.querySelector('.tab[data-tab="quote"]').click();
+    }
+    badge.textContent = 'CLIENT VIEW'; badge.className = 'view-badge client';
+    btn.textContent = '👁 Presentation: ON';
   } else {
-    msg.textContent = 'Incorrect passcode.'; msg.className = 'gate-msg err';
+    tab.classList.remove('hidden');
+    badge.textContent = 'INTERNAL VIEW'; badge.className = 'view-badge internal';
+    btn.textContent = '👁 Presentation mode';
   }
 }
 
@@ -428,6 +432,7 @@ async function api(method, url, body) {
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname); throw new Error('unauthenticated'); }
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
   return res.json();
 }
@@ -510,7 +515,7 @@ function init() {
   document.getElementById('drawer-close').addEventListener('click', () => document.getElementById('drawer').classList.remove('open'));
   document.getElementById('btn-save').addEventListener('click', saveCurrent);
   document.getElementById('btn-new').addEventListener('click', () => {
-    deal = defaultDeal(); currentId = null; internalUnlocked = internalUnlocked; // keep unlock state
+    deal = defaultDeal(); currentId = null;
     syncInputsFromDeal(); recompute(); setSaveStatus('New quote started.');
   });
 

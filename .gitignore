@@ -8,3 +8,7 @@ quotes.db-shm
 node_modules/
 package-lock.json
 npm-debug.log*
+
+# Cloudflare local dev secrets + wrangler state
+.dev.vars
+.wrangler/

@@ -6,15 +6,27 @@ workbook with a single local web app covering SaaS subscription pricing,
 hardware costing, implementation labour, rental/financing amortisation, an
 internal margin analysis, and a client-safe quote document.
 
-## Quick start
+It runs two ways from one codebase:
+
+- **Locally** — a zero-dependency Node server (`server.js`) with a SQLite file.
+- **Hosted on Cloudflare** — Pages + Functions (`functions/`) with a D1 database,
+  for a shareable URL with real shared persistence. See **Deploying to Cloudflare**.
+
+Both backends speak the same REST contract and serve the same `public/` UI and
+`pricing.js` engine, so behaviour is identical.
+
+## Quick start (local)
 
 No dependencies, no build step, no `npm install`. You only need **Node ≥ 22.5**
 (for the built-in `node:sqlite` module).
 
 ```bash
 npm start          # or: node --no-warnings server.js
-# → open http://127.0.0.1:4000
+# → open http://127.0.0.1:4000  → sign in (default password: "sunstone")
 ```
+
+The whole app is gated behind a single password (env `PASSWORD`, default
+`sunstone` locally — set `PASSWORD=… npm start` to change it).
 
 Run the calculation verification suite (checks the engine against the values
 already computed in the spreadsheet):
@@ -25,11 +37,13 @@ npm test           # or: node test/verify.js   → 95 checks, all passing
 
 ## What's in here
 
-| File | Purpose |
+| Path | Purpose |
 |------|---------|
-| `pricing.js` | **The calculation engine — single source of truth.** Pure, environment-agnostic JS used unchanged by the browser UI, the server, and the test script. Every formula is transcribed from the workbook. |
-| `server.js` | Zero-dependency local server (built-in `http` + `node:sqlite`). Serves the UI and a small REST API that saves/loads quotes. |
-| `public/` | The UI (`index.html`, `app.js`, `styles.css`). Vanilla JS, no framework. |
+| `public/pricing.js` | **The calculation engine — single source of truth.** Pure, environment-agnostic JS used unchanged by the browser UI, the local server, and the test script. Every formula is transcribed from the workbook. |
+| `server.js` | Zero-dependency local server (built-in `http` + `node:sqlite` + `node:crypto`). Serves the UI and the REST API; enforces the password gate. |
+| `functions/` | Cloudflare Pages Functions: auth middleware (`_middleware.js`), login/logout, and quotes CRUD against D1. Same REST contract as `server.js`. |
+| `public/` | The UI (`index.html`, `app.js`, `styles.css`, `login.html`, `pricing.js`). Vanilla JS, no framework, no build. |
+| `wrangler.toml` / `schema.sql` | Cloudflare deploy config + D1 table schema. |
 | `test/verify.js` | Verification harness. Runs known scenarios (Zambia Sugar + Scenarios A/B/C + hardware/PMT) against the workbook's own computed cell values. |
 | `Sunstone_Pricing_Calculator.xlsx` | The original workbook, kept as the reference source of truth. |
 
@@ -45,35 +59,97 @@ Two views toggled in one app:
   object the view reads. (Verified by the test suite: the serialised client quote
   contains no `margin`/`contribution`/`marginal` fields.)
 - **Internal view (the "Internal Margin" tab)** — full cost, margin, contribution,
-  step-cost, discount walk-down, and margin-floor data. Gated behind a passcode.
+  step-cost, discount walk-down, and margin-floor data.
 
-### About the passcode gate (default: `sunstone`)
+### Access control — two layers, and what each actually does
 
-**It is a deterrent, not security**, and the UI says so on the gate itself. The
-check runs entirely client-side and the internal figures are present in the page
-regardless. It only stops casual over-the-shoulder viewing during a client
-meeting. I built it anyway because that narrow purpose is genuinely useful and
-the cost was trivial — but do not mistake it for access control. If you ever need
-real protection, the margin endpoints would have to move server-side behind real
-auth. Change the passcode in `public/app.js` (`INTERNAL_PASSCODE`).
+1. **Site password gate (real, server-side).** The entire app is behind a single
+   shared password checked by the server. A signed HttpOnly session cookie is
+   issued on login (HMAC-SHA256, 12h expiry). Every route — including `pricing.js`,
+   which carries the cost/margin constants — returns 401/redirect until you are
+   authenticated, so **cost and margin figures are never served to an un-signed-in
+   browser.** This is the real protection. Set the password via the `PASSWORD`
+   secret (Cloudflare) or env var (local); set `SESSION_SECRET` to a long random
+   string in production.
+2. **"Presentation mode" toggle (on-screen deterrent only).** Once signed in, you
+   are trusted internal staff and margins are visible by default. The Presentation
+   toggle hides the Internal Margin tab and forces the client Quote view — purely
+   so margins aren't on screen if a client glances at your laptop. It changes
+   nothing the server sends; it is not security.
+
+This matches the "internal-only audience" decision: because clients never access
+the app (they receive the **printed/PDF quote** from the Customer Quote tab), the
+single site-wide gate is the proportionate way to keep margins server-side. The
+heavier alternative — splitting the pricing engine so anonymous browsers can load
+the quote builder but never receive cost inputs — is only needed if clients use
+the live app directly, which they don't here.
 
 ## Persistence — read this, it matters
 
-Quotes are saved to a **SQLite file (`quotes.db`) on the disk of the machine
-running `server.js`**. Concretely:
+The persistence story depends on **how you run it**:
 
-- ✅ They survive browser refreshes, switching browsers, and reboots.
-- ✅ Any browser pointing at this server sees them — including other people on
-  your LAN if you start the server bound to your network (`HOST=0.0.0.0 npm start`).
-- ❌ They are **NOT in any cloud.** A teammate on a different machine, or you on a
-  different device that can't reach this server, will **not** see your quotes.
-- ❌ This is **not** automatic cross-device sync.
+**Local (`server.js`)** — quotes go to a **SQLite file (`quotes.db`) on the disk of
+the machine running the server**.
 
-In short: **single-machine (optionally single-LAN) persistence.** If you need
-real cross-device/cross-teammate access, you'd host this on a shared server or
-swap the SQLite file for a hosted database — that's a deployment decision, not
-something this local app does for you. `quotes.db` is gitignored so quotes never
-get committed.
+- ✅ Survive refreshes, browser changes, and reboots.
+- ✅ Any browser pointing at this server sees them — incl. LAN peers if you bind to
+  your network (`HOST=0.0.0.0 npm start`).
+- ❌ **NOT cloud, NOT cross-device.** A teammate on another machine won't see them.
+
+→ **single-machine (optionally single-LAN) persistence.** `quotes.db` is gitignored.
+
+**Hosted on Cloudflare (D1)** — quotes go to a **Cloudflare D1 database** (managed,
+SQLite-backed, durable).
+
+- ✅ **Genuinely shared and cross-device:** every teammate hitting the URL reads and
+  writes the same store, from any machine, no LAN required.
+- ✅ Survives restarts/redeploys (it's a managed DB, not a container file).
+
+→ This is the real cross-team persistence the local version can't give you, and the
+reason the hosted path exists.
+
+## Deploying to Cloudflare (Pages + Functions + D1)
+
+The app is structured as a Cloudflare Pages project: static UI in `public/`, API in
+`functions/`, persistence in D1. One-time setup (needs your own Cloudflare account;
+these commands run under your `wrangler login`):
+
+```bash
+# 0. Auth wrangler to YOUR Cloudflare account
+npx wrangler login
+
+# 1. Create the D1 database, then paste the returned database_id into wrangler.toml
+npx wrangler d1 create sunstone-quotes
+
+# 2. Create the table (remote)
+npx wrangler d1 execute sunstone-quotes --remote --file=schema.sql
+
+# 3. Create the Pages project and deploy
+npx wrangler pages project create sunstone-pricing
+npx wrangler pages deploy public
+
+# 4. Set the secrets (you'll be prompted for the value)
+npx wrangler pages secret put PASSWORD         # the staff login password
+npx wrangler pages secret put SESSION_SECRET   # any long random string
+
+# 5. In the Cloudflare dashboard → your Pages project → Settings → Functions →
+#    D1 bindings, bind variable name `DB` to the `sunstone-quotes` database.
+#    (Bindings for the deployed project are set here, not only in wrangler.toml.)
+```
+
+Your shareable URL is the Pages project URL (`https://sunstone-pricing.pages.dev`,
+or a custom domain you attach). Anyone you give it to lands on the login page and
+needs the `PASSWORD` to get in.
+
+**Run the Cloudflare stack locally first** (recommended, to verify before deploying):
+
+```bash
+cp .dev.vars.example .dev.vars                              # local PASSWORD/SESSION_SECRET
+npx wrangler d1 execute sunstone-quotes --local --file=schema.sql
+npx wrangler pages dev                                      # → http://localhost:8788
+```
+
+`.dev.vars` and `.wrangler/` are gitignored; real secrets live only in Cloudflare.
 
 ## Calculation model (verified against the workbook)
 
@@ -135,12 +211,17 @@ Three came up:
 ## REST API (used by the UI)
 
 ```
-GET    /api/quotes        list saved quotes
-GET    /api/quotes/:id    one quote
-POST   /api/quotes        create  { name, deal }
-PUT    /api/quotes/:id    update  { name, deal }
-DELETE /api/quotes/:id    delete
+POST   /api/login         { password }  → sets session cookie
+POST   /api/logout        clears session cookie
+GET    /api/quotes        list saved quotes          (auth required)
+GET    /api/quotes/:id    one quote                  (auth required)
+POST   /api/quotes        create  { name, deal }      (auth required)
+PUT    /api/quotes/:id    update  { name, deal }      (auth required)
+DELETE /api/quotes/:id    delete                      (auth required)
 ```
+
+Identical on both backends (`server.js` and `functions/`). Unauthenticated API
+calls return 401; unauthenticated page navigations redirect to `/login`.
 
 A `deal` is the full input object (customer, vehicles, product selection,
 hardware config, implementation activities, rental config). All pricing is

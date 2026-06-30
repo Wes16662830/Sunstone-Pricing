@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sunstone Pricing Calculator</title>
-  <link rel="stylesheet" href="/public/styles.css" />
+  <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <header class="topbar">
@@ -27,8 +27,9 @@
       </label>
     </div>
     <div class="topbar-actions">
-      <div id="view-badge" class="view-badge client" title="Current data-access mode">CLIENT VIEW</div>
-      <button id="btn-internal" class="btn">🔓 Internal access</button>
+      <div id="view-badge" class="view-badge internal" title="Current on-screen mode">INTERNAL VIEW</div>
+      <button id="btn-present" class="btn" title="Hide internal cost/margin on screen for client-facing presentation">👁 Presentation mode</button>
+      <button id="btn-logout" class="btn">Sign out</button>
     </div>
   </header>
 
@@ -38,7 +39,7 @@
     <button class="tab" data-tab="implementation">Implementation</button>
     <button class="tab" data-tab="rental">Rental</button>
     <button class="tab" data-tab="quote">Customer Quote</button>
-    <button class="tab tab-internal locked" data-tab="margin" id="tab-margin">Internal Margin 🔒</button>
+    <button class="tab tab-internal unlocked" data-tab="margin" id="tab-margin">Internal Margin</button>
   </nav>
 
   <main id="main">
@@ -156,20 +157,10 @@
       </div>
     </section>
 
-    <!-- INTERNAL MARGIN (gated) -->
+    <!-- INTERNAL MARGIN (visible to signed-in internal staff; hidden in Presentation mode) -->
     <section class="panel" data-panel="margin">
-      <div id="margin-locked" class="card locked-card">
-        <h2>Internal Margin — locked</h2>
-        <p>Enter the internal passcode to reveal cost, margin, contribution, and step-cost data.</p>
-        <div class="gate-row">
-          <input id="gate-pass" type="password" placeholder="Passcode" />
-          <button id="gate-submit" class="btn">Unlock</button>
-          <span id="gate-msg" class="gate-msg"></span>
-        </div>
-        <p class="note warn-copy"><strong>This is a deterrent, not security.</strong> The check runs entirely in your browser and the internal figures are present in the page regardless of this gate. Anyone with the file or dev-tools can read them. Do not treat the passcode as protecting confidential data — it only stops casual over-the-shoulder viewing during a client meeting.</p>
-      </div>
-      <div id="margin-content" class="hidden">
-        <div class="banner banner-warn">INTERNAL — NOT FOR CLIENT. Cost &amp; margin data below.</div>
+      <div id="margin-content">
+        <div class="banner banner-warn">INTERNAL — NOT FOR CLIENT. Cost &amp; margin data below. Use “Presentation mode” to hide this on screen during client meetings.</div>
         <div class="card">
           <h2>Per-Product Margin Breakdown</h2>
           <table class="data" id="margin-table">
@@ -213,6 +204,6 @@
   <button id="drawer-toggle" class="drawer-toggle">📁 Quotes</button>
 
   <script src="/pricing.js"></script>
-  <script src="/public/app.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>

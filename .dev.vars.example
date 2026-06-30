@@ -1,0 +1,5 @@
+# Copy to .dev.vars for local `wrangler pages dev`. (.dev.vars is gitignored.)
+# These are the LOCAL development values only — set real secrets in Cloudflare
+# with `wrangler pages secret put PASSWORD` / `... SESSION_SECRET`.
+PASSWORD=sunstone
+SESSION_SECRET=dev-insecure-secret-change-me

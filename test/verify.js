@@ -5,7 +5,7 @@
  *
  * Run: node test/verify.js
  */
-const P = require('../pricing.js');
+const P = require('../public/pricing.js');
 
 let pass = 0, fail = 0;
 const APPROX = 1e-6;
