@@ -32,6 +32,7 @@ function defaultDeal() {
         smHandsetSku: 'oukitelG1S', smHandsetInclude: false,
         printerInclude: false, vehicleGpsInclude: false, trailerGpsInclude: false,
         fuelKitSingleInclude: false, fuelKitDualInclude: false,
+        custom: [], // additional catalogued items added to this quote: [{ key, qty }]
       },
     },
     implementation: { activities: P.IMPL_ACTIVITIES.map((a) => ({ ...a })) },
@@ -132,22 +133,41 @@ function renderHardware() {
     vehicleGps: 'vehicleGpsInclude', trailerGps: 'trailerGpsInclude',
     fuelKitSingle: 'fuelKitSingleInclude', fuelKitDual: 'fuelKitDualInclude',
   };
+  const cfg = P.getConfig();
+  const catOpts = (selKey) => Object.keys(cfg.hardwareCatalog)
+    .map((k) => `<option value="${k}" ${k === selKey ? 'selected' : ''}>${escapeHtml(cfg.hardwareCatalog[k].sku)}</option>`).join('');
   h.rows.forEach((r) => {
     const tr = document.createElement('tr');
-    if (!r.include) tr.className = 'row-off';
-    tr.innerHTML = `
-      <td><input type="checkbox" data-inc="${includeKey[r.id]}" ${r.include ? 'checked' : ''}></td>
-      <td>${r.desc}</td>
-      <td class="num">${r.qty}</td>
-      <td class="num">${fmt(r.unit)}</td>
-      <td class="num">${fmt(r.subtotal)}</td>`;
+    if (r.custom) {
+      const i = Number(r.id.split(':')[1]);
+      tr.innerHTML = `
+        <td><button class="btn cfg-del" data-custom-del="${i}" title="Remove">✕</button></td>
+        <td><select class="cell-input" data-custom-key="${i}" style="min-width:180px">${catOpts(r.catalogKey)}</select> <span class="note" style="margin:0">custom</span></td>
+        <td class="num"><input class="cell-input num" type="number" min="0" data-custom-qty="${i}" value="${r.qty}"></td>
+        <td class="num">${fmt(r.unit)}</td>
+        <td class="num">${fmt(r.subtotal)}</td>`;
+    } else {
+      if (!r.include) tr.className = 'row-off';
+      tr.innerHTML = `
+        <td><input type="checkbox" data-inc="${includeKey[r.id]}" ${r.include ? 'checked' : ''}></td>
+        <td>${r.desc}</td>
+        <td class="num">${r.qty}</td>
+        <td class="num">${fmt(r.unit)}</td>
+        <td class="num">${fmt(r.subtotal)}</td>`;
+    }
     tb.appendChild(tr);
   });
   tb.querySelectorAll('input[data-inc]').forEach((cb) => {
-    cb.addEventListener('change', (e) => {
-      deal.hardware.items[e.target.dataset.inc] = e.target.checked;
-      recompute();
-    });
+    cb.addEventListener('change', (e) => { deal.hardware.items[e.target.dataset.inc] = e.target.checked; recompute(); });
+  });
+  tb.querySelectorAll('[data-custom-key]').forEach((el) => {
+    el.addEventListener('change', (e) => { deal.hardware.items.custom[+e.target.dataset.customKey].key = e.target.value; recompute(); });
+  });
+  tb.querySelectorAll('[data-custom-qty]').forEach((el) => {
+    el.addEventListener('change', (e) => { deal.hardware.items.custom[+e.target.dataset.customQty].qty = Math.max(0, Number(e.target.value) || 0); recompute(); });
+  });
+  tb.querySelectorAll('[data-custom-del]').forEach((el) => {
+    el.addEventListener('click', (e) => { deal.hardware.items.custom.splice(+e.target.dataset.customDel, 1); recompute(); });
   });
 
   document.getElementById('hw-totals').innerHTML = `
@@ -381,6 +401,13 @@ function wireInputs() {
   document.getElementById('hw-intl').addEventListener('change', (e) => { deal.hardware.outsideSA = e.target.checked; recompute(); });
   document.getElementById('hw-dj-sku').addEventListener('change', (e) => { deal.hardware.items.djHandsetSku = e.target.value; recompute(); });
   document.getElementById('hw-sm-sku').addEventListener('change', (e) => { deal.hardware.items.smHandsetSku = e.target.value; recompute(); });
+  document.getElementById('hw-add-custom').addEventListener('click', () => {
+    const keys = Object.keys(P.getConfig().hardwareCatalog);
+    if (!deal.hardware.items.custom) deal.hardware.items.custom = [];
+    deal.hardware.items.custom.push({ key: keys[0], qty: deal.vehicles || 1 });
+    recompute();
+    document.querySelector('.tab[data-tab="hardware"]').click();
+  });
 
   document.getElementById('rent-term').addEventListener('change', (e) => { deal.rental.termMonths = Number(e.target.value); recompute(); });
   document.getElementById('rent-mode').addEventListener('change', (e) => { deal.rental.mode = e.target.value; recompute(); });
