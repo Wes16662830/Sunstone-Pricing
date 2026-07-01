@@ -14,7 +14,7 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   const p = url.pathname;
 
-  if (p === '/api/login' || OPEN_PATHS.has(p)) return next();
+  if (p === '/api/login' || p === '/api/health' || OPEN_PATHS.has(p)) return next();
 
   const authed = await verifyToken(env.SESSION_SECRET, getCookie(request, COOKIE));
   if (authed) return next();

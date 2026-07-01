@@ -116,10 +116,19 @@ async function handleApi(req, res) {
   const parts = url.pathname.split('/').filter(Boolean); // ['api', ...]
   const secureFlag = (req.headers['x-forwarded-proto'] === 'https') ? ' Secure;' : '';
 
+  // Diagnostic (no session required): reports only whether secrets are bound.
+  if (parts[1] === 'health' && req.method === 'GET') {
+    return sendJSON(res, 200, {
+      ok: true, hasPassword: !!PASSWORD, hasSessionSecret: !!SESSION_SECRET,
+      passwordLength: PASSWORD ? PASSWORD.length : 0,
+    });
+  }
+
   // Auth endpoints (no session required)
   if (parts[1] === 'login' && req.method === 'POST') {
     const body = await readBody(req).catch(() => ({}));
-    if (body.password === PASSWORD) {
+    // Trim both sides — pasted secrets often carry a trailing newline/space.
+    if (body.password && String(body.password).trim() === String(PASSWORD).trim()) {
       const cookie = `${COOKIE}=${makeToken()}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
       return sendJSON(res, 200, { ok: true }, { 'Set-Cookie': cookie });
     }
