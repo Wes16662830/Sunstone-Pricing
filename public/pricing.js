@@ -243,7 +243,7 @@
     const fuelKitDualSell = gpsSell + 2 * probeSell;
     const ir = activeConfig.installRates;
 
-    const rows = [
+    const baseRows = [
       { id: 'djHandset',  desc: `Digital Journey Handset (${item(djSku).sku})`, include: !!it.djHandsetInclude, qty: vehicles,        unit: sellPrice(item(djSku)) },
       { id: 'smHandset',  desc: `Stock Master Handset (${item(smSku).sku})`,    include: !!it.smHandsetInclude, qty: vehicles,        unit: sellPrice(item(smSku)) },
       { id: 'printer',    desc: item('urovoK419').sku,                          include: !!it.printerInclude,   qty: vehicles,        unit: printerSell },
@@ -251,7 +251,16 @@
       { id: 'trailerGps', desc: `Trailer GPS Tracker (${item('queclinkGV620MG').sku})`, include: !!it.trailerGpsInclude, qty: trailerQty,      unit: trailerSell },
       { id: 'fuelKitSingle', desc: 'Fuel Probe Kit — Single-Tank (GPS + 1 probe)', include: !!it.fuelKitSingleInclude, qty: single, unit: fuelKitSingleSell },
       { id: 'fuelKitDual',   desc: 'Fuel Probe Kit — Dual-Tank (GPS + 2 probes)',  include: !!it.fuelKitDualInclude,   qty: dual,   unit: fuelKitDualSell },
-    ].map((r) => ({ ...r, subtotal: (r.include ? 1 : 0) * r.qty * r.unit }));
+    ];
+
+    // Additional hardware items: any catalogued SKU (including ones created in
+    // Config) added to this quote with a manual quantity. Always "included".
+    (it.custom || []).forEach((cu, i) => {
+      const c = item(cu.key);
+      baseRows.push({ id: 'custom:' + i, custom: true, catalogKey: cu.key, desc: c.sku, include: true, qty: Number(cu.qty) || 0, unit: sellPrice(c) });
+    });
+
+    const rows = baseRows.map((r) => ({ ...r, subtotal: (r.include ? 1 : 0) * r.qty * r.unit }));
 
     const hardwareSubtotal = rows.reduce((s, r) => s + r.subtotal, 0);
     const shippingSurcharge = input.outsideSA ? hardwareSubtotal * activeConfig.intlShippingSurcharge : 0;
