@@ -64,6 +64,11 @@
 
     // Installation charges (advisory rates; auto-picked per scenario).
     installRates: { gpsAlone: 800, fuelKitSingle: 1600, fuelKitDual: 2200, trailerGps: 800 },
+    // Reusable named installation items, addable in Config and pickable when
+    // adding an installation line on the Hardware tab: [{ key, name, rate }].
+    installItems: [
+      { key: 'cameraInstall', name: 'Camera installation', rate: 1500 },
+    ],
     intlShippingSurcharge: 0.20, // hardware items only
 
     // Implementation rates.
@@ -140,6 +145,9 @@
       hardwareCatalog: Object.assign(clone(d.hardwareCatalog), cfg.hardwareCatalog || {}),
       handsetOptions: (Array.isArray(cfg.handsetOptions) && cfg.handsetOptions.length) ? cfg.handsetOptions : clone(d.handsetOptions),
       installRates: Object.assign({}, d.installRates, cfg.installRates || {}),
+      installItems: Array.isArray(cfg.installItems) ? cfg.installItems.map((x, i) => ({
+        key: x.key || ('ii' + i), name: x.name || 'Installation', rate: num(x.rate, 0),
+      })) : clone(d.installItems),
       intlShippingSurcharge: num(cfg.intlShippingSurcharge, d.intlShippingSurcharge),
       rates: Object.assign({}, d.rates, cfg.rates || {}),
       implActivities: Array.isArray(cfg.implActivities) ? cfg.implActivities.map((a) => ({
