@@ -40,6 +40,7 @@
     <button class="tab" data-tab="rental">Rental</button>
     <button class="tab" data-tab="quote">Customer Quote</button>
     <button class="tab tab-internal unlocked" data-tab="margin" id="tab-margin">Internal Margin</button>
+    <button class="tab tab-internal unlocked" data-tab="config" id="tab-config">⚙ Config</button>
   </nav>
 
   <main id="main">
@@ -184,6 +185,18 @@
           </div>
         </div>
       </div>
+    </section>
+
+    <!-- CONFIG (global pricing configuration; internal, hidden in Presentation mode) -->
+    <section class="panel" data-panel="config">
+      <div class="banner banner-warn">Global pricing configuration — edits here apply to <strong>every quote, for everyone</strong> (shared, stored server-side). Click <strong>Save configuration</strong> to apply.</div>
+      <div class="config-actions">
+        <button id="cfg-save" class="btn btn-primary">💾 Save configuration</button>
+        <button id="cfg-reload" class="btn">↻ Reload saved</button>
+        <button id="cfg-reset" class="btn">Reset to workbook defaults</button>
+        <span id="config-status" class="save-status"></span>
+      </div>
+      <div id="config-root"></div>
     </section>
   </main>
 

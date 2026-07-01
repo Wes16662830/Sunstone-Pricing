@@ -407,19 +407,20 @@ function wireInputs() {
 
 function setPresentationMode(on) {
   presentationMode = on;
-  const tab = document.getElementById('tab-margin');
+  const internalTabs = ['tab-margin', 'tab-config'];
   const badge = document.getElementById('view-badge');
   const btn = document.getElementById('btn-present');
   if (on) {
-    tab.classList.add('hidden');
-    // If currently viewing the internal margin tab, bounce to the client Quote.
-    if (document.querySelector('.tab[data-tab="margin"]').classList.contains('active')) {
+    internalTabs.forEach((id) => document.getElementById(id).classList.add('hidden'));
+    // If currently on an internal tab, bounce to the client Quote.
+    const active = document.querySelector('.tab.active');
+    if (active && (active.dataset.tab === 'margin' || active.dataset.tab === 'config')) {
       document.querySelector('.tab[data-tab="quote"]').click();
     }
     badge.textContent = 'CLIENT VIEW'; badge.className = 'view-badge client';
     btn.textContent = '👁 Presentation: ON';
   } else {
-    tab.classList.remove('hidden');
+    internalTabs.forEach((id) => document.getElementById(id).classList.remove('hidden'));
     badge.textContent = 'INTERNAL VIEW'; badge.className = 'view-badge internal';
     btn.textContent = '👁 Presentation mode';
   }
@@ -503,10 +504,258 @@ async function saveCurrent() {
   }
 }
 
+// --- CONFIG EDITOR ----------------------------------------------------------
+// editCfg is a working copy of the global config. Save writes it to the server
+// (shared) and applies it to the live engine; every quote recomputes from it.
+let editCfg = P.getConfig();
+
+async function loadConfig() {
+  try {
+    const res = await api('GET', '/api/config');
+    if (res && res.config) P.setConfig(res.config); // else keep built-in defaults
+  } catch (e) { /* offline → defaults */ }
+  editCfg = P.getConfig();
+}
+
+const getPath = (o, path) => path.split('.').reduce((x, k) => (x == null ? x : x[k]), o);
+function setPath(o, path, v) {
+  const ks = path.split('.'); let x = o;
+  for (let i = 0; i < ks.length - 1; i++) x = x[ks[i]];
+  x[ks[ks.length - 1]] = v;
+}
+function numIn(path, kind) {
+  const raw = getPath(editCfg, path);
+  const shown = kind === 'pct' ? Math.round(Number(raw) * 1000) / 10 : raw;
+  return `<input class="cell-input num" type="number" step="any" data-path="${path}" data-kind="${kind}" value="${shown}">`;
+}
+function textIn(path, width) {
+  return `<input class="cell-input" type="text" data-path="${path}" data-kind="text" value="${escapeHtml(getPath(editCfg, path) || '')}" style="width:${width || 160}px">`;
+}
+function boolIn(path) {
+  return `<input type="checkbox" data-path="${path}" data-kind="bool" ${getPath(editCfg, path) ? 'checked' : ''}>`;
+}
+
+function renderConfig() {
+  const c = editCfg;
+  const productOpts = (sel) => '<option value="">— none —</option>' +
+    c.products.map((p) => `<option value="${p.key}" ${sel && sel === p.key ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('');
+
+  const productRows = c.products.map((p, i) => `
+    <tr>
+      <td>${textIn(`products.${i}.name`, 150)}</td>
+      <td class="num">${numIn(`products.${i}.marginalCost`, 'money')}</td>
+      <td class="num">${numIn(`products.${i}.targetGM`, 'pct')}</td>
+      <td class="num">${numIn(`products.${i}.stepThreshold`, 'num')}</td>
+      <td class="num" data-derived="plist:${i}"></td>
+      <td><button class="btn cfg-del" data-del="products:${i}">✕</button></td>
+    </tr>`).join('');
+
+  const volRows = c.volumeTiers.map((t, i) => `
+    <tr>
+      <td class="num">${numIn(`volumeTiers.${i}.min`, 'num')}</td>
+      <td class="num">${numIn(`volumeTiers.${i}.max`, 'num')}</td>
+      <td>${textIn(`volumeTiers.${i}.name`, 120)}</td>
+      <td class="num">${numIn(`volumeTiers.${i}.discount`, 'pct')}</td>
+      <td><button class="btn cfg-del" data-del="volumeTiers:${i}">✕</button></td>
+    </tr>`).join('');
+
+  const bundleKeys = Object.keys(c.bundleSchedule).sort((a, b) => a - b);
+  const bundleRows = bundleKeys.map((k) => `
+    <tr><td class="num">${k}</td><td class="num">${numIn(`bundleSchedule.${k}`, 'pct')}</td>
+    <td><button class="btn cfg-del" data-del="bundleSchedule:${k}">✕</button></td></tr>`).join('');
+
+  const catKeys = Object.keys(c.hardwareCatalog);
+  const catRows = catKeys.map((k) => `
+    <tr>
+      <td><code>${k}</code></td>
+      <td>${textIn(`hardwareCatalog.${k}.sku`, 240)}</td>
+      <td class="num">${numIn(`hardwareCatalog.${k}.cost`, 'money')}</td>
+      <td class="num" data-derived="hsell:${k}"></td>
+      <td style="text-align:center">${c.handsetOptions.indexOf(k) > -1 ? '☑' : ''}
+        <input type="checkbox" data-handset="${k}" ${c.handsetOptions.indexOf(k) > -1 ? 'checked' : ''}></td>
+      <td><button class="btn cfg-del" data-del="hardwareCatalog:${k}">✕</button></td>
+    </tr>`).join('');
+
+  const actRows = c.implActivities.map((a, i) => `
+    <tr>
+      <td>${textIn(`implActivities.${i}.desc`, 200)}</td>
+      <td class="num">${numIn(`implActivities.${i}.hours`, 'num')}</td>
+      <td style="text-align:center">${boolIn(`implActivities.${i}.senior`)}</td>
+      <td class="num">${numIn(`implActivities.${i}.discount`, 'pct')}</td>
+      <td><select class="cell-input" data-path="implActivities.${i}.product" data-kind="text">${productOpts(a.product)}</select></td>
+      <td><button class="btn cfg-del" data-del="implActivities:${i}">✕</button></td>
+    </tr>`).join('');
+
+  document.getElementById('config-root').innerHTML = `
+    <div class="card">
+      <h2>Products <button class="btn cfg-add" data-add="product">＋ Add product</button></h2>
+      <table class="data">
+        <thead><tr><th>Name</th><th class="num">Marginal Cost R</th><th class="num">Target GM %</th><th class="num">Step Threshold</th><th class="num">List Price R (auto)</th><th></th></tr></thead>
+        <tbody>${productRows}</tbody>
+      </table>
+      <table class="kv compact"><tr><td>Step cost (R/mo per step)</td><td>${numIn('stepCost', 'money')}</td></tr></table>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>Bundle Discount (by # products) <button class="btn cfg-add" data-add="bundle">＋</button></h2>
+        <table class="data"><thead><tr><th># Products</th><th class="num">Discount %</th><th></th></tr></thead><tbody>${bundleRows}</tbody></table>
+      </div>
+      <div class="card">
+        <h2>Volume Tiers <button class="btn cfg-add" data-add="volume">＋ Add tier</button></h2>
+        <table class="data"><thead><tr><th class="num">Min Veh</th><th class="num">Max Veh</th><th>Name</th><th class="num">Discount %</th><th></th></tr></thead><tbody>${volRows}</tbody></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Hardware Catalog <button class="btn cfg-add" data-add="hardware">＋ Add item</button></h2>
+      <table class="data">
+        <thead><tr><th>Key</th><th>SKU / description</th><th class="num">Cost R</th><th class="num">Sell R (auto)</th><th>Handset option?</th><th></th></tr></thead>
+        <tbody>${catRows}</tbody>
+      </table>
+      <table class="kv compact">
+        <tr><td>Hardware markup %</td><td>${numIn('hardwareMarkup', 'pct')}</td></tr>
+        <tr><td>International shipping surcharge %</td><td>${numIn('intlShippingSurcharge', 'pct')}</td></tr>
+        <tr><td>Install — GPS only (R)</td><td>${numIn('installRates.gpsAlone', 'money')}</td></tr>
+        <tr><td>Install — Fuel Kit single-tank (R)</td><td>${numIn('installRates.fuelKitSingle', 'money')}</td></tr>
+        <tr><td>Install — Fuel Kit dual-tank (R)</td><td>${numIn('installRates.fuelKitDual', 'money')}</td></tr>
+        <tr><td>Install — Trailer GPS (R)</td><td>${numIn('installRates.trailerGps', 'money')}</td></tr>
+      </table>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>Implementation Activities <button class="btn cfg-add" data-add="activity">＋ Add activity</button></h2>
+        <table class="data">
+          <thead><tr><th>Description</th><th class="num">Hours</th><th>Senior?</th><th class="num">Disc %</th><th>Bills w/ product</th><th></th></tr></thead>
+          <tbody>${actRows}</tbody>
+        </table>
+        <table class="kv compact">
+          <tr><td>Consultant rate (R/hr)</td><td>${numIn('rates.consultant', 'money')}</td></tr>
+          <tr><td>Senior Consultant rate (R/hr)</td><td>${numIn('rates.senior', 'money')}</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h2>Rental</h2>
+        <table class="kv">
+          <tr><td>Cost of capital (annual %)</td><td>${numIn('rental.costOfCapital', 'pct')}</td></tr>
+          <tr><td>Financing margin (annual %)</td><td>${numIn('rental.financingMargin', 'pct')}</td></tr>
+          <tr><td>Rental annual rate (auto)</td><td class="num" data-derived="rate:0"></td></tr>
+          <tr><td>Renewal support fee (%/mo of hardware)</td><td>${numIn('rental.renewalSupportFeeMonthly', 'pct')}</td></tr>
+        </table>
+      </div>
+    </div>`;
+
+  refreshDerived();
+}
+
+function refreshDerived() {
+  document.querySelectorAll('#config-root [data-derived]').forEach((el) => {
+    const [type, idx] = el.dataset.derived.split(':');
+    if (type === 'plist') { const p = editCfg.products[+idx]; el.textContent = fmt(p.targetGM < 1 ? p.marginalCost / (1 - p.targetGM) : 0); }
+    else if (type === 'hsell') { const it = editCfg.hardwareCatalog[idx]; el.textContent = fmt((it.cost || 0) * (1 + editCfg.hardwareMarkup)); }
+    else if (type === 'rate') { el.textContent = pct(editCfg.rental.costOfCapital + editCfg.rental.financingMargin); }
+  });
+}
+
+function wireConfig() {
+  const root = document.getElementById('config-root');
+
+  root.addEventListener('change', (e) => {
+    const el = e.target;
+    if (el.dataset.handset !== undefined) {
+      const key = el.dataset.handset;
+      const arr = editCfg.handsetOptions;
+      const at = arr.indexOf(key);
+      if (el.checked && at === -1) arr.push(key);
+      if (!el.checked && at > -1) arr.splice(at, 1);
+      return;
+    }
+    const path = el.dataset.path;
+    if (!path) return;
+    const kind = el.dataset.kind;
+    let v;
+    if (kind === 'text') v = el.value;
+    else if (kind === 'bool') v = el.checked;
+    else { v = Number(el.value) || 0; if (kind === 'pct') v = v / 100; }
+    setPath(editCfg, path, v);
+    refreshDerived();
+  });
+
+  root.addEventListener('click', (e) => {
+    const add = e.target.dataset.add;
+    const del = e.target.dataset.del;
+    if (add) {
+      if (add === 'product') editCfg.products.push({ key: 'p' + Math.random().toString(36).slice(2, 8), name: 'New Product', marginalCost: 0, targetGM: 0.75, stepThreshold: 300 });
+      else if (add === 'volume') editCfg.volumeTiers.push({ min: 0, max: 999999, name: 'New Tier', discount: 0 });
+      else if (add === 'bundle') { const next = Object.keys(editCfg.bundleSchedule).length + 1; editCfg.bundleSchedule[next] = 0; }
+      else if (add === 'hardware') { const k = P.slug('item ' + (Object.keys(editCfg.hardwareCatalog).length + 1)); editCfg.hardwareCatalog[k] = { sku: 'New Item', cost: 0, note: '' }; }
+      else if (add === 'activity') editCfg.implActivities.push({ desc: 'New Activity', hours: 0, senior: true, discount: 0 });
+      renderConfig();
+    } else if (del) {
+      const [kind, id] = del.split(':');
+      if (kind === 'products') editCfg.products.splice(+id, 1);
+      else if (kind === 'volumeTiers') editCfg.volumeTiers.splice(+id, 1);
+      else if (kind === 'implActivities') editCfg.implActivities.splice(+id, 1);
+      else if (kind === 'bundleSchedule') delete editCfg.bundleSchedule[id];
+      else if (kind === 'hardwareCatalog') delete editCfg.hardwareCatalog[id];
+      renderConfig();
+    }
+  });
+
+  document.getElementById('cfg-save').addEventListener('click', async () => {
+    try {
+      // Normalise through the engine (assigns product keys, coerces types), then persist.
+      const normalized = P.setConfig(editCfg);
+      await api('PUT', '/api/config', { config: normalized });
+      editCfg = P.getConfig();
+      // Rebuild the current deal's product selection/activities against the new config,
+      // preserving existing selections where the product still exists.
+      reconcileDealWithConfig();
+      renderConfig();
+      recompute();
+      setConfigStatus('Configuration saved — applied to all quotes.');
+    } catch (e) {
+      setConfigStatus('Save failed: ' + e.message, true);
+    }
+  });
+
+  document.getElementById('cfg-reload').addEventListener('click', async () => {
+    await loadConfig();
+    renderConfig();
+    setConfigStatus('Reloaded saved configuration.');
+  });
+
+  document.getElementById('cfg-reset').addEventListener('click', () => {
+    if (!confirm('Reset the editor to the built-in workbook defaults? (Not saved until you click Save.)')) return;
+    editCfg = P.getDefaultConfig();
+    renderConfig();
+    setConfigStatus('Editor reset to workbook defaults — click Save to apply.');
+  });
+}
+
+function setConfigStatus(text, isErr) {
+  const el = document.getElementById('config-status');
+  el.textContent = text;
+  el.style.color = isErr ? 'var(--bad)' : 'var(--good)';
+  if (text) setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 5000);
+}
+
+// Keep the open deal consistent when products change: drop selections/handsets for
+// products that no longer exist; leave everything else intact.
+function reconcileDealWithConfig() {
+  const keys = new Set(P.getConfig().products.map((p) => p.key));
+  Object.keys(deal.selected).forEach((k) => { if (!keys.has(k)) delete deal.selected[k]; });
+}
+
 // --- Init -------------------------------------------------------------------
-function init() {
+async function init() {
+  await loadConfig();          // apply shared config before first render
+  deal = defaultDeal();        // build defaults from the (now loaded) config
   wireInputs();
+  wireConfig();
   syncInputsFromDeal();
+  renderConfig();
   recompute();
 
   document.getElementById('drawer-toggle').addEventListener('click', () => {

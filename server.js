@@ -45,6 +45,11 @@ db.exec(`
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS config (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    data_json   TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+  );
 `);
 const nowISO = () => new Date().toISOString();
 
@@ -142,6 +147,25 @@ async function handleApi(req, res) {
   if (!isAuthed(req)) return sendJSON(res, 401, { error: 'unauthenticated' });
 
   try {
+    if (parts[1] === 'config') {
+      if (req.method === 'GET') {
+        const row = db.prepare('SELECT data_json, updated_at FROM config WHERE id = 1').get();
+        return sendJSON(res, 200, { config: row ? JSON.parse(row.data_json) : null, updatedAt: row ? row.updated_at : null });
+      }
+      if (req.method === 'PUT') {
+        const body = await readBody(req);
+        if (!body || typeof body.config !== 'object' || body.config === null) {
+          return sendJSON(res, 400, { error: 'config object is required' });
+        }
+        const ts = nowISO();
+        db.prepare(
+          'INSERT INTO config (id, data_json, updated_at) VALUES (1, ?, ?) ' +
+          'ON CONFLICT(id) DO UPDATE SET data_json = excluded.data_json, updated_at = excluded.updated_at'
+        ).run(JSON.stringify(body.config), ts);
+        return sendJSON(res, 200, { ok: true, updatedAt: ts });
+      }
+    }
+
     if (parts[1] === 'quotes') {
       const id = parts[2];
       if (req.method === 'GET' && !id) {

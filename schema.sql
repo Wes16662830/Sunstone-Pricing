@@ -9,3 +9,11 @@ CREATE TABLE IF NOT EXISTS quotes (
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL
 );
+
+-- Global pricing configuration (single shared row, id = 1). When absent, the
+-- app falls back to the built-in workbook defaults.
+CREATE TABLE IF NOT EXISTS config (
+  id          INTEGER PRIMARY KEY CHECK (id = 1),
+  data_json   TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
