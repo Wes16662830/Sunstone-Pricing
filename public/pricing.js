@@ -126,7 +126,25 @@
       marginalCost: num(p.marginalCost, 0),
       targetGM: num(p.targetGM, 0.75),
       stepThreshold: num(p.stepThreshold, 300),
+      // How the product is billed: per vehicle (default), per user, or a flat
+      // monthly fee. Drives the quantity the effective price is multiplied by.
+      billing: (p.billing === 'perUser' || p.billing === 'flat') ? p.billing : 'perVehicle',
+      // Whether this product participates in the bundle / volume discounts
+      // (default yes). Excluded products are priced at list × 1 for that discount
+      // and (for bundle) do not count toward the bundle-size tier.
+      bundleEligible: p.bundleEligible !== false,
+      volumeEligible: p.volumeEligible !== false,
     };
+  }
+
+  // Quantity the effective price is multiplied by, per billing model.
+  function billingQty(product, vehicles, users) {
+    if (product.billing === 'perUser') return users;
+    if (product.billing === 'flat') return 1;
+    return vehicles;
+  }
+  function billingLabel(billing) {
+    return billing === 'perUser' ? 'per user' : billing === 'flat' ? 'flat / month' : 'per vehicle';
   }
 
   // Merge a (possibly partial / user-edited) config over the defaults so missing
@@ -203,21 +221,30 @@
   // ---------------------------------------------------------------------------
   function calcSubscription(input) {
     const vehicles = Number(input.vehicles) || 0;
+    const users = Number(input.users) || 0;
     const selected = input.selected || {};
     const products = activeConfig.products;
 
-    const count = products.reduce((n, p) => n + (selected[p.key] ? 1 : 0), 0);
+    // Bundle tier is driven by the count of selected products that are
+    // bundle-eligible (excluded products don't count toward the tier).
+    const count = products.reduce((n, p) => n + ((selected[p.key] && p.bundleEligible) ? 1 : 0), 0);
     const bundle = bundleMultiplier(count);
     const volume = volumeTier(vehicles);
 
     const lines = products.map((p) => {
       const list = listPrice(p);
-      const effective = list * bundle.multiplier * volume.multiplier;
+      // Apply each discount only to eligible products.
+      const effective = list
+        * (p.bundleEligible ? bundle.multiplier : 1)
+        * (p.volumeEligible ? volume.multiplier : 1);
       const isSel = !!selected[p.key];
-      const monthly = isSel ? effective * vehicles : 0;
+      const qty = billingQty(p, vehicles, users);
+      const monthly = isSel ? effective * qty : 0;
       return {
         key: p.key, name: p.name, quoteLabel: p.quoteLabel, calcLabel: p.calcLabel,
-        selected: isSel, listPrice: list, effectivePrice: effective,
+        billing: p.billing, billingLabel: billingLabel(p.billing),
+        bundleEligible: p.bundleEligible, volumeEligible: p.volumeEligible,
+        selected: isSel, listPrice: list, effectivePrice: effective, qty,
         monthly, annual: monthly * 12,
       };
     });
@@ -231,7 +258,7 @@
     const fuelTrackingConflict = !!(selected.tracking && selected.fuel);
 
     return {
-      vehicles, productCount: count, bundle, volume, lines, totalMonthly,
+      vehicles, users, productCount: count, bundle, volume, lines, totalMonthly,
       totalAnnual: totalMonthly * 12,
       blendedPerVehicle: vehicles ? totalMonthly / vehicles : 0,
       effectiveBlendedDiscount: 1 - bundle.multiplier * volume.multiplier,
@@ -389,15 +416,16 @@
 
     const rows = products.map((p, i) => {
       const line = subscription.lines[i];
+      const qty = line.qty; // billing quantity (vehicles / users / 1)
       const revenue = line.monthly;
-      const monthlyCost = line.selected ? p.marginalCost * vehicles : 0;
+      const monthlyCost = line.selected ? p.marginalCost * qty : 0;
       const contribution = revenue - monthlyCost;
       const grossMargin = revenue ? contribution / revenue : 0;
 
       let stepWarning = '—';
       let stepCount = 0;
-      if (line.selected && vehicles >= p.stepThreshold) {
-        stepCount = Math.floor(vehicles / p.stepThreshold);
+      if (line.selected && qty >= p.stepThreshold) {
+        stepCount = Math.floor(qty / p.stepThreshold);
         stepWarning = `⚠ ${stepCount} step(s) crossed: +R${(stepCount * stepCost).toLocaleString('en-ZA')}/mo cost`;
       } else if (line.selected) {
         stepWarning = 'ok';
@@ -421,11 +449,19 @@
     const totalCost = rows.reduce((s, r) => s + r.monthlyCost, 0);
     const totalContribution = totalRevenue - totalCost;
 
-    const grossListValue = subscription.lines.reduce(
-      (s, l) => s + (l.selected ? l.listPrice * vehicles : 0), 0);
-    const bundleDisc = -grossListValue * subscription.bundle.discount;
-    const volumeDisc = -(grossListValue + bundleDisc) * subscription.volume.discount;
-    const netSubscription = grossListValue + bundleDisc + volumeDisc;
+    // Discount walk-down, respecting per-product billing quantity and
+    // bundle/volume eligibility (excluded products keep list price for that step).
+    const bMult = subscription.bundle.multiplier;
+    let grossListValue = 0, afterBundle = 0, netSubscription = 0;
+    subscription.lines.forEach((l) => {
+      if (!l.selected) return;
+      const gl = l.listPrice * l.qty;
+      grossListValue += gl;
+      afterBundle += gl * (l.bundleEligible ? bMult : 1);
+      netSubscription += l.effectivePrice * l.qty; // = l.monthly
+    });
+    const bundleDisc = afterBundle - grossListValue;
+    const volumeDisc = netSubscription - afterBundle;
 
     return {
       rows, totalRevenue, totalCost, totalContribution,
@@ -442,8 +478,8 @@
   // ---------------------------------------------------------------------------
   function buildClientQuote(subscription, implementation, hardware) {
     const subscriptionItems = subscription.lines.filter((l) => l.selected).map((l) => ({
-      product: l.quoteLabel, vehicles: subscription.vehicles,
-      pricePerVehicle: l.effectivePrice, monthly: l.monthly, annual: l.annual,
+      product: l.quoteLabel, billing: l.billing, billingLabel: l.billingLabel, qty: l.qty,
+      unitPrice: l.effectivePrice, monthly: l.monthly, annual: l.annual,
     }));
 
     const implementationItems = implementation.lines.filter((l) => l.total > 0)
@@ -482,7 +518,7 @@
   // FULL DEAL
   // ---------------------------------------------------------------------------
   function calcDeal(deal) {
-    const subscription = calcSubscription({ vehicles: deal.vehicles, selected: deal.selected });
+    const subscription = calcSubscription({ vehicles: deal.vehicles, users: deal.users, selected: deal.selected });
     const hardware = calcHardware({ ...(deal.hardware || {}), vehicles: deal.vehicles });
     const implementation = calcImplementation({
       activities: (deal.implementation && deal.implementation.activities) || activeConfig.implActivities,

@@ -22,6 +22,9 @@
       <label>Vehicles
         <input id="in-vehicles" type="number" min="0" step="1" value="20" />
       </label>
+      <label>Users
+        <input id="in-users" type="number" min="0" step="1" value="0" title="Used by products billed per user" />
+      </label>
       <label>Quote date
         <input id="in-date" type="date" />
       </label>
@@ -55,7 +58,7 @@
           <h2>Product Selection</h2>
           <table class="data" id="sub-table">
             <thead>
-              <tr><th>Include</th><th>Product</th><th class="num">List/veh/mo</th><th class="num">Effective/veh/mo</th><th class="num">Monthly</th><th class="num">Annual</th></tr>
+              <tr><th>Include</th><th>Product</th><th>Billing</th><th class="num">Qty</th><th class="num">List/unit</th><th class="num">Effective/unit</th><th class="num">Monthly</th><th class="num">Annual</th></tr>
             </thead>
             <tbody id="sub-tbody"></tbody>
           </table>
