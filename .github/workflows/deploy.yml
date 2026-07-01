@@ -1,0 +1,43 @@
+name: Deploy to Cloudflare Pages
+
+# Auto-deploys on every push to any branch:
+#   - push to `main`  -> PRODUCTION deployment (main is the Pages production branch)
+#   - push to any other branch -> a PREVIEW deployment at its own URL
+# Cloudflare Pages decides production vs preview from the --branch value below;
+# nothing here forces a feature branch into production.
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+# Don't let two deploys of the same branch race each other.
+concurrency:
+  group: cf-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Reads wrangler.toml for the D1 binding, so keep a real database_id there.
+          command: pages deploy public --project-name=sunstone-pricing --branch=${{ github.ref_name }}
+
+# One-time setup (does NOT belong in CI — run once, by you):
+#   * GitHub repo secrets (Settings -> Secrets and variables -> Actions):
+#       CLOUDFLARE_API_TOKEN  - a token with "Cloudflare Pages: Edit" (+ "D1: Edit")
+#       CLOUDFLARE_ACCOUNT_ID - your account id (Cloudflare dashboard, right sidebar)
+#   * Cloudflare Pages project secrets (persist across deploys, so CI needn't set them):
+#       npx wrangler pages secret put PASSWORD
+#       npx wrangler pages secret put SESSION_SECRET
+#   * Apply the D1 schema once (idempotent; not run here to keep deploys simple):
+#       npx wrangler d1 execute sunstone-quotes --remote --file=schema.sql

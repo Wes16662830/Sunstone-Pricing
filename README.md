@@ -151,6 +151,32 @@ npx wrangler pages dev                                      # → http://localho
 
 `.dev.vars` and `.wrangler/` are gitignored; real secrets live only in Cloudflare.
 
+### Auto-deploy on push (GitHub Actions)
+
+`.github/workflows/deploy.yml` deploys to Cloudflare Pages on **every push**:
+push to `main` → production, push to any other branch → a preview URL. Cloudflare
+decides production vs preview from the branch name, so a feature branch is never
+forced into production.
+
+To arm it, add two **GitHub repo secrets** (Settings → Secrets and variables →
+Actions) — the only manual step, and it must be you since the token is tied to
+your Cloudflare account:
+
+| Secret | Where to get it |
+|--------|-----------------|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard → My Profile → API Tokens → Create Token → grant **Cloudflare Pages: Edit** (and **D1: Edit** if you later run migrations from CI). |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard → right sidebar of any account page. |
+
+The app's `PASSWORD` and `SESSION_SECRET` are **Cloudflare Pages project secrets**
+(set once with `wrangler pages secret put`), not GitHub secrets — they persist on
+the project across deploys, so CI never touches them. The D1 schema is a one-time
+`wrangler d1 execute … --remote` (idempotent `CREATE TABLE IF NOT EXISTS`), kept
+out of the deploy job to keep it simple. Once the two secrets exist and you've run
+`pages project create` once, every push deploys with no further action.
+
+Note: the workflow reads the D1 binding from `wrangler.toml`, so put your real
+`database_id` there (it isn't a secret) before relying on CI deploys.
+
 ## Calculation model (verified against the workbook)
 
 All of these were read directly from the `.xlsx` cell formulas (`openpyxl`,
