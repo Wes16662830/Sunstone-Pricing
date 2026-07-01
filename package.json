@@ -1,0 +1,18 @@
+{
+  "name": "sunstone-pricing-calculator",
+  "version": "1.0.0",
+  "description": "B2B pricing/quoting tool for Sunstone Logistic Systems — SaaS subscription, hardware, implementation, rental, and a client-safe quote view. Calculations transcribed and verified against Sunstone_Pricing_Calculator.xlsx. Runs locally (Node + SQLite) or on Cloudflare (Pages + Functions + D1).",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node --no-warnings server.js",
+    "test": "node test/verify.js",
+    "cf:schema:local": "wrangler d1 execute sunstone-quotes --local --file=schema.sql",
+    "cf:schema:remote": "wrangler d1 execute sunstone-quotes --remote --file=schema.sql",
+    "cf:dev": "wrangler pages dev",
+    "cf:deploy": "wrangler pages deploy public"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

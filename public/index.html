@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sunstone Pricing Calculator</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◧</span>
+      <div>
+        <div class="brand-title">Sunstone Pricing Calculator</div>
+        <div class="brand-sub">Sunstone Logistic Systems — internal quoting tool</div>
+      </div>
+    </div>
+    <div class="deal-inputs">
+      <label>Customer
+        <input id="in-customer" type="text" placeholder="Customer name" />
+      </label>
+      <label>Vehicles
+        <input id="in-vehicles" type="number" min="0" step="1" value="20" />
+      </label>
+      <label>Quote date
+        <input id="in-date" type="date" />
+      </label>
+    </div>
+    <div class="topbar-actions">
+      <div id="view-badge" class="view-badge internal" title="Current on-screen mode">INTERNAL VIEW</div>
+      <button id="btn-present" class="btn" title="Hide internal cost/margin on screen for client-facing presentation">👁 Presentation mode</button>
+      <button id="btn-logout" class="btn">Sign out</button>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="subscription">Subscription</button>
+    <button class="tab" data-tab="hardware">Hardware</button>
+    <button class="tab" data-tab="implementation">Implementation</button>
+    <button class="tab" data-tab="rental">Rental</button>
+    <button class="tab" data-tab="quote">Customer Quote</button>
+    <button class="tab tab-internal unlocked" data-tab="margin" id="tab-margin">Internal Margin</button>
+  </nav>
+
+  <main id="main">
+    <!-- SUBSCRIPTION -->
+    <section class="panel active" data-panel="subscription">
+      <div id="conflict-banner" class="banner banner-warn hidden"></div>
+      <div class="grid-2">
+        <div class="card">
+          <h2>Product Selection</h2>
+          <table class="data" id="sub-table">
+            <thead>
+              <tr><th>Include</th><th>Product</th><th class="num">List R/veh/mo</th><th class="num">Effective R/veh/mo</th><th class="num">Monthly R</th><th class="num">Annual R</th></tr>
+            </thead>
+            <tbody id="sub-tbody"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h2>Discount &amp; Totals</h2>
+          <table class="kv" id="sub-summary"></table>
+          <div class="headline" id="sub-headline"></div>
+          <p class="note">⚠ Implementation fee is quoted separately based on project scope, integrations, and training requirements.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- HARDWARE -->
+    <section class="panel" data-panel="hardware">
+      <div class="grid-2">
+        <div class="card">
+          <h2>Fleet Composition</h2>
+          <table class="kv">
+            <tr><td>Total vehicles (from Subscription)</td><td class="num" id="hw-total-veh">—</td></tr>
+            <tr><td>Fuel-monitored — single-tank</td><td><input id="hw-single" class="cell-input num" type="number" min="0" value="0" /></td></tr>
+            <tr><td>Fuel-monitored — dual-tank</td><td><input id="hw-dual" class="cell-input num" type="number" min="0" value="0" /></td></tr>
+            <tr><td>Trailers (Trailer GPS qty)</td><td><input id="hw-trailer" class="cell-input num" type="number" min="0" value="0" /></td></tr>
+            <tr><td>Tracking-only qty (auto)</td><td class="num" id="hw-trackonly">—</td></tr>
+            <tr><td>Outside South Africa? (+20% hardware)</td><td><input id="hw-intl" type="checkbox" /></td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h2>Handset Models (per-line dropdown)</h2>
+          <table class="kv">
+            <tr><td>Digital Journey handset</td><td><select id="hw-dj-sku" class="cell-input"></select></td></tr>
+            <tr><td>Stock Master handset</td><td><select id="hw-sm-sku" class="cell-input"></select></td></tr>
+          </table>
+          <p class="note">Improvement over the source workbook: handset is a real dropdown across all three SKUs, not a hardcoded per-row VLOOKUP.</p>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Hardware Items</h2>
+        <table class="data" id="hw-table">
+          <thead><tr><th>Include</th><th>Item</th><th class="num">Qty</th><th class="num">Unit Sell R</th><th class="num">Subtotal R</th></tr></thead>
+          <tbody id="hw-tbody"></tbody>
+        </table>
+        <table class="kv compact" id="hw-totals"></table>
+      </div>
+      <div class="card">
+        <h2>Installation (auto-computed)</h2>
+        <table class="data" id="hw-install-table">
+          <thead><tr><th>Scenario</th><th class="num">Qty</th><th class="num">Rate R</th><th class="num">Subtotal R</th></tr></thead>
+          <tbody id="hw-install-tbody"></tbody>
+        </table>
+        <table class="kv compact" id="hw-grand"></table>
+      </div>
+    </section>
+
+    <!-- IMPLEMENTATION -->
+    <section class="panel" data-panel="implementation">
+      <div class="card">
+        <h2>Implementation Activities (time &amp; materials)</h2>
+        <p class="note">Training rows only bill when the matching product is selected on Subscription — shown greyed as “not billed” otherwise.</p>
+        <table class="data" id="impl-table">
+          <thead><tr><th>Activity</th><th class="num">Hours</th><th>Senior?</th><th class="num">Rate R/hr</th><th class="num">Discount %</th><th class="num">Total R</th><th>Status</th></tr></thead>
+          <tbody id="impl-tbody"></tbody>
+        </table>
+        <table class="kv compact" id="impl-totals"></table>
+      </div>
+    </section>
+
+    <!-- RENTAL -->
+    <section class="panel" data-panel="rental">
+      <div class="grid-2">
+        <div class="card">
+          <h2>Rental Configuration</h2>
+          <table class="kv">
+            <tr><td>Term (months)</td><td>
+              <select id="rent-term" class="cell-input"><option>12</option><option>24</option><option selected>36</option></select>
+            </td></tr>
+            <tr><td>Mode</td><td>
+              <select id="rent-mode" class="cell-input"><option>Pure Rental</option><option>Rent-to-Own</option></select>
+            </td></tr>
+            <tr><td>Annual rate (cost of capital + financing margin)</td><td class="num" id="rent-rate">—</td></tr>
+            <tr><td>Monthly factor per R1 capital (PMT)</td><td class="num" id="rent-factor">—</td></tr>
+          </table>
+          <p id="rent-mode-note" class="note"></p>
+        </div>
+        <div class="card">
+          <h2>All-Inclusive Monthly Bundle</h2>
+          <table class="kv" id="rent-bundle"></table>
+          <div class="headline" id="rent-headline"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>End-of-Term Renewal Options</h2>
+        <table class="kv" id="rent-renewal"></table>
+      </div>
+    </section>
+
+    <!-- CUSTOMER QUOTE (client-safe) -->
+    <section class="panel" data-panel="quote">
+      <div class="banner banner-info">Client-safe view — rendered only from the whitelisted quote projection. No cost, margin, contribution, or step-cost data exists in this view by construction.</div>
+      <div class="card quote-doc" id="quote-doc"></div>
+      <div class="card no-print">
+        <button class="btn" onclick="window.print()">🖨 Print / Save PDF</button>
+      </div>
+    </section>
+
+    <!-- INTERNAL MARGIN (visible to signed-in internal staff; hidden in Presentation mode) -->
+    <section class="panel" data-panel="margin">
+      <div id="margin-content">
+        <div class="banner banner-warn">INTERNAL — NOT FOR CLIENT. Cost &amp; margin data below. Use “Presentation mode” to hide this on screen during client meetings.</div>
+        <div class="card">
+          <h2>Per-Product Margin Breakdown</h2>
+          <table class="data" id="margin-table">
+            <thead><tr><th>Product</th><th>Sel</th><th class="num">Revenue R</th><th class="num">Marginal R/lic</th><th class="num">Cost R</th><th class="num">Contribution R</th><th class="num">GM %</th><th>Step-Cost</th></tr></thead>
+            <tbody id="margin-tbody"></tbody>
+          </table>
+          <table class="kv compact" id="margin-totals"></table>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <h2>Discount Walk-Down</h2>
+            <table class="kv" id="margin-walkdown"></table>
+          </div>
+          <div class="card">
+            <h2>Margin Floor Check</h2>
+            <p class="note">Floor @50% GM = marginal×2; floor @60% GM = marginal÷0.4. Flags effective price below floor.</p>
+            <table class="data" id="margin-floor">
+              <thead><tr><th>Product</th><th class="num">Marginal</th><th class="num">50% Floor</th><th class="num">60% Floor</th><th class="num">Effective</th><th>Status</th></tr></thead>
+              <tbody id="margin-floor-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- SAVED QUOTES DRAWER -->
+  <aside class="drawer" id="drawer">
+    <div class="drawer-head">
+      <span>Saved Quotes</span>
+      <button id="drawer-close" class="icon-btn">✕</button>
+    </div>
+    <div class="drawer-actions">
+      <button id="btn-save" class="btn btn-primary">💾 Save current</button>
+      <button id="btn-new" class="btn">＋ New quote</button>
+    </div>
+    <div id="save-status" class="save-status"></div>
+    <ul id="quote-list" class="quote-list"></ul>
+    <p class="note drawer-note">Quotes persist to a local SQLite file on the machine running the server. Single-machine storage — not cloud, not cross-device. See README.</p>
+  </aside>
+  <button id="drawer-toggle" class="drawer-toggle">📁 Quotes</button>
+
+  <script src="/pricing.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

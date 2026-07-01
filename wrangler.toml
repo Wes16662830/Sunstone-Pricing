@@ -1,0 +1,18 @@
+# Cloudflare Pages + Functions + D1 configuration.
+# The static UI is served from ./public ; the API lives in ./functions .
+name = "sunstone-pricing"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "public"
+
+# D1 database binding. Create the DB once with:
+#   npx wrangler d1 create sunstone-quotes
+# then paste the returned database_id below (and into the Pages project bindings).
+[[d1_databases]]
+binding = "DB"
+database_name = "sunstone-quotes"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+# Secrets (PASSWORD, SESSION_SECRET) are NOT stored here. Set them with:
+#   npx wrangler pages secret put PASSWORD
+#   npx wrangler pages secret put SESSION_SECRET
+# For local `wrangler pages dev`, they are read from .dev.vars (gitignored).

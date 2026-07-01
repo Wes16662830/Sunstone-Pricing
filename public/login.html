@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sunstone Pricing — Sign in</title>
+  <style>
+    :root { --bg:#0f1419; --panel:#1a2029; --line:#313b48; --text:#e6edf3; --dim:#9aa7b5; --accent:#f5a623; --bad:#f85149; }
+    * { box-sizing: border-box; }
+    body { margin:0; height:100vh; display:flex; align-items:center; justify-content:center;
+      background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:28px; width:340px; }
+    .logo { font-size:30px; color:var(--accent); }
+    h1 { font-size:16px; margin:8px 0 2px; }
+    .sub { font-size:12px; color:var(--dim); margin-bottom:20px; }
+    label { display:block; font-size:11px; color:var(--dim); margin-bottom:5px; }
+    input { width:100%; background:#232b36; border:1px solid var(--line); color:var(--text);
+      padding:9px 11px; border-radius:5px; font-size:14px; font-family:"SF Mono",Menlo,Consolas,monospace; }
+    button { width:100%; margin-top:14px; background:var(--accent); color:#1a1408; border:none;
+      padding:10px; border-radius:5px; font-weight:600; font-size:14px; cursor:pointer; }
+    button:hover { background:#ffb733; }
+    .msg { color:var(--bad); font-size:12px; min-height:16px; margin-top:10px; }
+    .note { font-size:11px; color:var(--dim); margin-top:16px; line-height:1.5; }
+  </style>
+</head>
+<body>
+  <form class="card" id="form">
+    <div class="logo">◧</div>
+    <h1>Sunstone Pricing Calculator</h1>
+    <div class="sub">Internal tool — sign in to continue</div>
+    <label for="pw">Access password</label>
+    <input id="pw" type="password" autocomplete="current-password" autofocus />
+    <button type="submit">Sign in</button>
+    <div class="msg" id="msg"></div>
+    <p class="note">Internal staff only. This password gates the entire application server-side; cost and margin figures are not served to the browser until you are signed in.</p>
+  </form>
+  <script>
+    const form = document.getElementById('form');
+    const msg = document.getElementById('msg');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      msg.textContent = '';
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: document.getElementById('pw').value }),
+        });
+        if (res.ok) {
+          const next = new URLSearchParams(location.search).get('next') || '/';
+          location.href = next;
+        } else {
+          msg.textContent = 'Incorrect password.';
+        }
+      } catch (err) {
+        msg.textContent = 'Network error — is the server running?';
+      }
+    });
+  </script>
+</body>
+</html>
