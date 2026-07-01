@@ -44,6 +44,7 @@ function defaultDeal() {
     customerName: 'Zambia Sugar',
     quoteDate: new Date().toISOString().slice(0, 10),
     vehicles: 20,
+    users: 0,
     selected: { tracking: true, fuel: true, routeBuilder: true, digitalJourney: true, stockMaster: false },
     hardware: {
       singleTank: 0, dualTank: 0, trailerQty: 0, outsideSA: false,
@@ -100,9 +101,12 @@ function renderSubscription() {
   s.lines.forEach((l) => {
     const tr = document.createElement('tr');
     if (!l.selected) tr.className = 'row-off';
+    const excl = [!l.bundleEligible ? 'no bundle' : '', !l.volumeEligible ? 'no volume' : ''].filter(Boolean).join(', ');
     tr.innerHTML = `
       <td><input type="checkbox" data-prod="${l.key}" ${l.selected ? 'checked' : ''}></td>
-      <td>${l.name}</td>
+      <td>${l.name}${excl ? ` <span class="note" style="margin:0">(${excl})</span>` : ''}</td>
+      <td>${l.billingLabel}</td>
+      <td class="num">${l.qty}</td>
       <td class="num">${cur(l.listPrice)}</td>
       <td class="num">${cur(l.effectivePrice)}</td>
       <td class="num">${cur(l.monthly)}</td>
@@ -306,7 +310,7 @@ function renderRental() {
 function renderQuote() {
   const q = result.clientQuote;
   const subRows = q.subscriptionItems.map((i) => `
-    <tr><td>${i.product}</td><td class="num">${i.vehicles}</td><td class="num">${cur(i.pricePerVehicle)}</td><td class="num">${cur(i.monthly)}</td><td class="num">${cur(i.annual)}</td></tr>`).join('');
+    <tr><td>${i.product}</td><td>${i.billingLabel}</td><td class="num">${i.qty}</td><td class="num">${cur(i.unitPrice)}</td><td class="num">${cur(i.monthly)}</td><td class="num">${cur(i.annual)}</td></tr>`).join('');
   const implRows = q.implementationItems.map((i) => `
     <tr><td>${i.desc}</td><td class="num">${i.hours}</td><td class="num">${cur(i.rate, 0)}</td><td class="num">${i.discount ? pct(i.discount, 0) : ''}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
   const hwRows = q.hardwareItems.map((i) => `
@@ -318,14 +322,14 @@ function renderQuote() {
     <div class="q-meta">
       <div><span>Prepared for:</span> <strong>${escapeHtml(deal.customerName || '—')}</strong></div>
       <div><span>Quote date:</span> ${deal.quoteDate}</div>
-      <div><span>Fleet size:</span> ${deal.vehicles} vehicles</div>
+      <div><span>Fleet size:</span> ${deal.vehicles} vehicles${deal.users ? ` &nbsp;•&nbsp; <span>Users:</span> ${deal.users}` : ''}</div>
     </div>
 
     <h3>Subscription Items</h3>
     <table>
-      <thead><tr><th>Product</th><th class="num">Vehicles</th><th class="num">Price/veh/mo</th><th class="num">Monthly ${displayCurrency}</th><th class="num">Annual ${displayCurrency}</th></tr></thead>
-      <tbody>${subRows || '<tr><td colspan="5">No subscription items selected.</td></tr>'}
-        <tr class="q-total"><td>Total subscription value (excl. VAT)</td><td></td><td></td><td class="num">${cur(q.subscriptionMonthly)}</td><td class="num">${cur(q.subscriptionAnnual)}</td></tr>
+      <thead><tr><th>Product</th><th>Basis</th><th class="num">Qty</th><th class="num">Unit/mo</th><th class="num">Monthly ${displayCurrency}</th><th class="num">Annual ${displayCurrency}</th></tr></thead>
+      <tbody>${subRows || '<tr><td colspan="6">No subscription items selected.</td></tr>'}
+        <tr class="q-total"><td>Total subscription value (excl. VAT)</td><td></td><td></td><td></td><td class="num">${cur(q.subscriptionMonthly)}</td><td class="num">${cur(q.subscriptionAnnual)}</td></tr>
       </tbody>
     </table>
 
@@ -429,6 +433,7 @@ function escapeHtml(s) {
 function syncInputsFromDeal() {
   document.getElementById('in-customer').value = deal.customerName || '';
   document.getElementById('in-vehicles').value = deal.vehicles;
+  document.getElementById('in-users').value = deal.users || 0;
   document.getElementById('in-date').value = deal.quoteDate;
   document.getElementById('hw-single').value = deal.hardware.singleTank;
   document.getElementById('hw-dual').value = deal.hardware.dualTank;
@@ -444,6 +449,7 @@ function syncInputsFromDeal() {
 function wireInputs() {
   document.getElementById('in-customer').addEventListener('input', (e) => { deal.customerName = e.target.value; renderQuote(); });
   document.getElementById('in-vehicles').addEventListener('input', (e) => { deal.vehicles = Math.max(0, Number(e.target.value) || 0); recompute(); });
+  document.getElementById('in-users').addEventListener('input', (e) => { deal.users = Math.max(0, Number(e.target.value) || 0); recompute(); });
   document.getElementById('in-date').addEventListener('input', (e) => { deal.quoteDate = e.target.value; renderQuote(); });
 
   document.getElementById('hw-single').addEventListener('input', (e) => { deal.hardware.singleTank = Math.max(0, Number(e.target.value) || 0); recompute(); });
@@ -666,12 +672,20 @@ function renderConfig() {
   const productOpts = (sel) => '<option value="">— none —</option>' +
     c.products.map((p) => `<option value="${p.key}" ${sel && sel === p.key ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('');
 
+  const billingSel = (i, val) => `<select class="cell-input" data-path="products.${i}.billing" data-kind="text" style="min-width:110px">
+      <option value="perVehicle" ${val === 'perVehicle' ? 'selected' : ''}>Per vehicle</option>
+      <option value="perUser" ${val === 'perUser' ? 'selected' : ''}>Per user</option>
+      <option value="flat" ${val === 'flat' ? 'selected' : ''}>Flat / month</option>
+    </select>`;
   const productRows = c.products.map((p, i) => `
     <tr>
       <td>${textIn(`products.${i}.name`, 150)}</td>
       <td class="num">${numIn(`products.${i}.marginalCost`, 'money')}</td>
       <td class="num">${numIn(`products.${i}.targetGM`, 'pct')}</td>
       <td class="num">${numIn(`products.${i}.stepThreshold`, 'num')}</td>
+      <td>${billingSel(i, p.billing)}</td>
+      <td style="text-align:center">${boolIn(`products.${i}.bundleEligible`)}</td>
+      <td style="text-align:center">${boolIn(`products.${i}.volumeEligible`)}</td>
       <td class="num" data-derived="plist:${i}"></td>
       <td><button class="btn cfg-del" data-del="products:${i}">✕</button></td>
     </tr>`).join('');
@@ -723,7 +737,7 @@ function renderConfig() {
     <div class="card">
       <h2>Products <button class="btn cfg-add" data-add="product">＋ Add product</button></h2>
       <table class="data">
-        <thead><tr><th>Name</th><th class="num">Marginal Cost R</th><th class="num">Target GM %</th><th class="num">Step Threshold</th><th class="num">List Price R (auto)</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th class="num">Marginal Cost R</th><th class="num">Target GM %</th><th class="num">Step Threshold</th><th>Billing</th><th title="Eligible for bundle discount">Bundle?</th><th title="Eligible for volume discount">Volume?</th><th class="num">List Price R (auto)</th><th></th></tr></thead>
         <tbody>${productRows}</tbody>
       </table>
       <table class="kv compact"><tr><td>Step cost (R/mo per step)</td><td>${numIn('stepCost', 'money')}</td></tr></table>
@@ -853,7 +867,7 @@ function wireConfig() {
     const add = e.target.dataset.add;
     const del = e.target.dataset.del;
     if (add) {
-      if (add === 'product') editCfg.products.push({ key: 'p' + Math.random().toString(36).slice(2, 8), name: 'New Product', marginalCost: 0, targetGM: 0.75, stepThreshold: 300 });
+      if (add === 'product') editCfg.products.push({ key: 'p' + Math.random().toString(36).slice(2, 8), name: 'New Product', marginalCost: 0, targetGM: 0.75, stepThreshold: 300, billing: 'perVehicle', bundleEligible: true, volumeEligible: true });
       else if (add === 'volume') editCfg.volumeTiers.push({ min: 0, max: 999999, name: 'New Tier', discount: 0 });
       else if (add === 'bundle') { const next = Object.keys(editCfg.bundleSchedule).length + 1; editCfg.bundleSchedule[next] = 0; }
       else if (add === 'hardware') { const k = P.slug('item ' + (Object.keys(editCfg.hardwareCatalog).length + 1)); editCfg.hardwareCatalog[k] = { sku: 'New Item', cost: 0, note: '' }; }
