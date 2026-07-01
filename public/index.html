@@ -27,6 +27,9 @@
       </label>
     </div>
     <div class="topbar-actions">
+      <label class="cur-picker" title="Display currency (converted from Rands)">
+        <select id="currency-select" class="cell-input"></select>
+      </label>
       <div id="view-badge" class="view-badge internal" title="Current on-screen mode">INTERNAL VIEW</div>
       <button id="btn-present" class="btn" title="Hide internal cost/margin on screen for client-facing presentation">👁 Presentation mode</button>
       <button id="btn-logout" class="btn">Sign out</button>
@@ -52,7 +55,7 @@
           <h2>Product Selection</h2>
           <table class="data" id="sub-table">
             <thead>
-              <tr><th>Include</th><th>Product</th><th class="num">List R/veh/mo</th><th class="num">Effective R/veh/mo</th><th class="num">Monthly R</th><th class="num">Annual R</th></tr>
+              <tr><th>Include</th><th>Product</th><th class="num">List/veh/mo</th><th class="num">Effective/veh/mo</th><th class="num">Monthly</th><th class="num">Annual</th></tr>
             </thead>
             <tbody id="sub-tbody"></tbody>
           </table>
@@ -92,7 +95,7 @@
       <div class="card">
         <h2>Hardware Items <button class="btn cfg-add" id="hw-add-custom">＋ Add item</button></h2>
         <table class="data" id="hw-table">
-          <thead><tr><th>Include</th><th>Item</th><th class="num">Qty</th><th class="num">Unit Sell R</th><th class="num">Subtotal R</th></tr></thead>
+          <thead><tr><th>Include</th><th>Item</th><th class="num">Qty</th><th class="num">Unit Sell</th><th class="num">Subtotal</th></tr></thead>
           <tbody id="hw-tbody"></tbody>
         </table>
         <p class="note">“＋ Add item” adds any catalogued SKU (including ones you created in Config) with a manual quantity — it flows into the hardware total and the customer quote. (Installation is not auto-added for these.)</p>
@@ -101,7 +104,7 @@
       <div class="card">
         <h2>Installation (auto-computed) <button class="btn cfg-add" id="hw-add-install">＋ Add installation</button></h2>
         <table class="data" id="hw-install-table">
-          <thead><tr><th>Scenario</th><th class="num">Qty</th><th class="num">Rate R</th><th class="num">Subtotal R</th></tr></thead>
+          <thead><tr><th>Scenario</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Subtotal</th></tr></thead>
           <tbody id="hw-install-tbody"></tbody>
         </table>
         <p class="note">The four standard rows are auto-computed from your hardware selections. Use “＋ Add installation” for a manual installation line (description, qty, rate) that flows into the grand total and the quote.</p>
@@ -115,7 +118,7 @@
         <h2>Implementation Activities (time &amp; materials)</h2>
         <p class="note">Training rows only bill when the matching product is selected on Subscription — shown greyed as “not billed” otherwise.</p>
         <table class="data" id="impl-table">
-          <thead><tr><th>On</th><th>Activity</th><th class="num">Hours</th><th>Senior?</th><th class="num">Rate R/hr</th><th class="num">Discount %</th><th class="num">Total R</th><th>Status</th></tr></thead>
+          <thead><tr><th>On</th><th>Activity</th><th class="num">Hours</th><th>Senior?</th><th class="num">Rate/hr</th><th class="num">Discount %</th><th class="num">Total</th><th>Status</th></tr></thead>
           <tbody id="impl-tbody"></tbody>
         </table>
         <table class="kv compact" id="impl-totals"></table>
@@ -167,7 +170,7 @@
         <div class="card">
           <h2>Per-Product Margin Breakdown</h2>
           <table class="data" id="margin-table">
-            <thead><tr><th>Product</th><th>Sel</th><th class="num">Revenue R</th><th class="num">Marginal R/lic</th><th class="num">Cost R</th><th class="num">Contribution R</th><th class="num">GM %</th><th>Step-Cost</th></tr></thead>
+            <thead><tr><th>Product</th><th>Sel</th><th class="num">Revenue</th><th class="num">Marginal/lic</th><th class="num">Cost</th><th class="num">Contribution</th><th class="num">GM %</th><th>Step-Cost</th></tr></thead>
             <tbody id="margin-tbody"></tbody>
           </table>
           <table class="kv compact" id="margin-totals"></table>
