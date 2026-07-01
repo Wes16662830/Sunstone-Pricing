@@ -359,6 +359,8 @@
     const monthlyHardwareInstall = pmt(monthlyRate, term, capital);
     const totalMonthly = monthlySaaS + monthlyHardwareInstall;
     const perVehicle = vehicles ? totalMonthly / vehicles : 0;
+    const saasPerVehicle = vehicles ? monthlySaaS / vehicles : 0;
+    const hardwareInstallPerVehicle = vehicles ? monthlyHardwareInstall / vehicles : 0;
 
     const refreshPerVehicle = perVehicle;
     const retainPerVehicle =
@@ -370,6 +372,7 @@
       term, mode, vehicles, annualRate, monthlyFactor,
       monthlySaaS, hardwareTotal, installTotal, capital,
       monthlyHardwareInstall, totalMonthly, perVehicle,
+      saasPerVehicle, hardwareInstallPerVehicle,
       totalOverTerm: totalMonthly * term,
       purchaseModelUpfront: capital + implementationTotal,
       renewal: { refreshPerVehicle, retainPerVehicle, retainSavingVsFirst },

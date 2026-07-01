@@ -282,13 +282,15 @@ function renderRental() {
     : 'MODE: Rent-to-Own — customer owns the hardware at end of term; treated like a financed purchase. Renewal = software only on owned kit.';
 
   document.getElementById('rent-bundle').innerHTML = `
-    <tr><td>Vehicles</td><td>${r.vehicles}</td></tr>
-    <tr><td>Monthly SaaS (recurring software)</td><td>${fmtR(r.monthlySaaS)}</td></tr>
-    <tr><td>Capital to finance (hardware + install)</td><td>${fmtR(r.capital)}</td></tr>
-    <tr><td>Monthly hardware + install (amortised, PMT)</td><td>${fmtR(r.monthlyHardwareInstall)}</td></tr>
-    <tr class="total"><td>TOTAL monthly rental bundle</td><td>${fmtR(r.totalMonthly)}</td></tr>
-    <tr class="subtle"><td>Total payable over ${r.term}-month term</td><td>${fmtR(r.totalOverTerm)}</td></tr>
-    <tr class="subtle"><td>Purchase-model upfront avoided (hw+install+impl)</td><td>${fmtR(r.purchaseModelUpfront)}</td></tr>`;
+    <thead><tr><th>Component</th><th class="num">Monthly (total)</th><th class="num">Per vehicle / mo</th></tr></thead>
+    <tbody>
+      <tr><td>Software subscription (SaaS)</td><td class="num">${fmtR(r.monthlySaaS)}</td><td class="num">${fmtR(r.saasPerVehicle)}</td></tr>
+      <tr><td>Hardware + installation (amortised over ${r.term} mo)</td><td class="num">${fmtR(r.monthlyHardwareInstall)}</td><td class="num">${fmtR(r.hardwareInstallPerVehicle)}</td></tr>
+      <tr class="total"><td>TOTAL monthly (all-inclusive)</td><td class="num">${fmtR(r.totalMonthly)}</td><td class="num">${fmtR(r.perVehicle)}</td></tr>
+      <tr class="subtle"><td>Vehicles: ${r.vehicles} • Capital financed (hardware + install)</td><td class="num">${fmtR(r.capital)}</td><td></td></tr>
+      <tr class="subtle"><td>Total payable over ${r.term}-month term</td><td class="num">${fmtR(r.totalOverTerm)}</td><td></td></tr>
+      <tr class="subtle"><td>Upfront avoided vs purchase (hw+install+impl)</td><td class="num">${fmtR(r.purchaseModelUpfront)}</td><td></td></tr>
+    </tbody>`;
 
   document.getElementById('rent-headline').innerHTML =
     `<div class="lbl">All-inclusive per vehicle / month (${r.term}-mo • ${r.mode})</div><div class="big">${fmtR(r.perVehicle)}</div>`;
