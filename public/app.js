@@ -129,8 +129,8 @@ function renderSubscription() {
     <tr><td>Volume tier</td><td>${s.volume.name}</td></tr>
     <tr><td>Volume multiplier (discount)</td><td>${fmt(s.volume.multiplier, 2)} (${pct(s.volume.discount)})</td></tr>
     <tr class="subtle"><td>Effective blended discount</td><td>${pct(s.effectiveBlendedDiscount)}</td></tr>
-    <tr class="total"><td>Total monthly revenue</td><td>${fmtR(s.totalMonthly)}</td></tr>
-    <tr class="total"><td>Total annual revenue</td><td>${fmtR(s.totalAnnual)}</td></tr>`;
+    <tr class="total"><td>Total monthly cost</td><td>${fmtR(s.totalMonthly)}</td></tr>
+    <tr class="total"><td>Total annual cost</td><td>${fmtR(s.totalAnnual)}</td></tr>`;
 
   document.getElementById('sub-headline').innerHTML =
     `<div class="lbl">Blended price per vehicle / month</div><div class="big">${fmtR(s.blendedPerVehicle)}</div>`;
