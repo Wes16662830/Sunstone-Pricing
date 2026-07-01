@@ -304,8 +304,20 @@
       { id: 'fuelKitDual',   desc: 'Fuel Probe Kit — Dual-Tank (GPS + 2 probes)',  include: !!it.fuelKitDualInclude,   qty: dual,   unit: fuelKitDualSell },
     ];
 
-    // Additional hardware items: any catalogued SKU (including ones created in
-    // Config) added to this quote with a manual quantity. Always "included".
+    // Every OTHER catalogued item (Streamax + anything added in Config) shows as
+    // a directly selectable row, so nothing is hidden. The "wired" keys above are
+    // excluded (handsets are chosen via the handset dropdowns; GPS/printer/probe
+    // are their own rows). Per-item include + qty come from items.extra[key].
+    const wiredKeys = new Set([...opts, 'urovoK419', 'teltonikaFMB125', 'queclinkGV620MG', 'omnicommLS4']);
+    const extra = it.extra || {};
+    Object.keys(cat).forEach((k) => {
+      if (wiredKeys.has(k)) return;
+      const sel = extra[k] || {};
+      const qty = (sel.qty === undefined || sel.qty === null || sel.qty === '') ? vehicles : Number(sel.qty);
+      baseRows.push({ id: 'cat:' + k, catalogItem: true, catalogKey: k, desc: cat[k].sku, include: !!sel.include, qty, unit: sellPrice(cat[k]) });
+    });
+
+    // Legacy one-off custom rows (kept for older saved quotes).
     (it.custom || []).forEach((cu, i) => {
       const c = item(cu.key);
       baseRows.push({ id: 'custom:' + i, custom: true, catalogKey: cu.key, desc: c.sku, include: true, qty: Number(cu.qty) || 0, unit: sellPrice(c) });
@@ -324,12 +336,22 @@
       { id: 'trailerInstall',    desc: 'Trailer GPS installation',                  qty: it.trailerGpsInclude ? trailerQty : 0,      rate: ir.trailerGps },
     ];
 
-    // Manually-added installation lines: [{ desc, qty, rate }].
+    // Every configured installation item shows as a directly selectable row.
+    // Per-item include + qty come from items.installSel[key].
+    const installSel = it.installSel || {};
+    (activeConfig.installItems || []).forEach((ii) => {
+      const sel = installSel[ii.key] || {};
+      const qty = (sel.qty === undefined || sel.qty === null || sel.qty === '') ? vehicles : Number(sel.qty);
+      baseInstall.push({ id: 'inst:' + ii.key, installItem: true, installKey: ii.key, desc: ii.name, include: !!sel.include, qty, rate: Number(ii.rate) || 0 });
+    });
+
+    // Manually-added one-off installation lines: [{ desc, qty, rate }].
     (it.customInstall || []).forEach((ci, i) => {
       baseInstall.push({ id: 'customInstall:' + i, custom: true, desc: ci.desc || 'Installation', qty: Number(ci.qty) || 0, rate: Number(ci.rate) || 0 });
     });
 
-    const installRows = baseInstall.map((r) => ({ ...r, subtotal: r.qty * r.rate }));
+    // subtotal = qty × rate, but a row with an explicit include:false contributes 0.
+    const installRows = baseInstall.map((r) => ({ ...r, subtotal: r.include === false ? 0 : r.qty * r.rate }));
 
     const installSubtotal = installRows.reduce((s, r) => s + r.subtotal, 0);
 

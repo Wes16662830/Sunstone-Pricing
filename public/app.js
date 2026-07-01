@@ -53,8 +53,10 @@ function defaultDeal() {
         smHandsetSku: 'oukitelG1S', smHandsetInclude: false,
         printerInclude: false, vehicleGpsInclude: false, trailerGpsInclude: false,
         fuelKitSingleInclude: false, fuelKitDualInclude: false,
-        custom: [],        // additional catalogued items: [{ key, qty }]
-        customInstall: [], // additional installation lines: [{ desc, qty, rate }]
+        extra: {},         // catalog items shown as rows: { [key]: { include, qty } }
+        installSel: {},    // installation items shown as rows: { [key]: { include, qty } }
+        custom: [],        // legacy one-off catalogued items (older quotes)
+        customInstall: [], // one-off installation lines: [{ desc, qty, rate }]
       },
     },
     implementation: { activities: P.IMPL_ACTIVITIES.map((a) => ({ ...a })) },
@@ -163,11 +165,20 @@ function renderHardware() {
     .map((k) => `<option value="${k}" ${k === selKey ? 'selected' : ''}>${escapeHtml(cfg.hardwareCatalog[k].sku)}</option>`).join('');
   h.rows.forEach((r) => {
     const tr = document.createElement('tr');
-    if (r.custom) {
+    if (r.catalogItem) {
+      // A catalogued item (auto-listed): include checkbox + editable qty.
+      if (!r.include) tr.className = 'row-off';
+      tr.innerHTML = `
+        <td><input type="checkbox" data-extra-key="${r.catalogKey}" ${r.include ? 'checked' : ''}></td>
+        <td>${r.desc}</td>
+        <td class="num"><input class="cell-input num" type="number" min="0" data-extra-qty="${r.catalogKey}" value="${r.qty}"></td>
+        <td class="num">${cur(r.unit)}</td>
+        <td class="num">${cur(r.subtotal)}</td>`;
+    } else if (r.custom) {
       const i = Number(r.id.split(':')[1]);
       tr.innerHTML = `
         <td><button class="btn cfg-del" data-custom-del="${i}" title="Remove">✕</button></td>
-        <td><select class="cell-input" data-custom-key="${i}" style="min-width:180px">${catOpts(r.catalogKey)}</select> <span class="note" style="margin:0">custom</span></td>
+        <td><select class="cell-input" data-custom-key="${i}" style="min-width:180px">${catOpts(r.catalogKey)}</select> <span class="note" style="margin:0">one-off</span></td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-custom-qty="${i}" value="${r.qty}"></td>
         <td class="num">${cur(r.unit)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
@@ -182,8 +193,15 @@ function renderHardware() {
     }
     tb.appendChild(tr);
   });
+  const ensureExtra = (k) => (deal.hardware.items.extra[k] = deal.hardware.items.extra[k] || { include: false, qty: deal.vehicles || 0 });
   tb.querySelectorAll('input[data-inc]').forEach((cb) => {
     cb.addEventListener('change', (e) => { deal.hardware.items[e.target.dataset.inc] = e.target.checked; recompute(); });
+  });
+  tb.querySelectorAll('[data-extra-key]').forEach((cb) => {
+    cb.addEventListener('change', (e) => { const k = e.target.dataset.extraKey; ensureExtra(k).include = e.target.checked; recompute(); });
+  });
+  tb.querySelectorAll('[data-extra-qty]').forEach((el) => {
+    el.addEventListener('change', (e) => { const k = e.target.dataset.extraQty; ensureExtra(k).qty = Math.max(0, Number(e.target.value) || 0); recompute(); });
   });
   tb.querySelectorAll('[data-custom-key]').forEach((el) => {
     el.addEventListener('change', (e) => { deal.hardware.items.custom[+e.target.dataset.customKey].key = e.target.value; recompute(); });
@@ -204,13 +222,19 @@ function renderHardware() {
   itb.innerHTML = '';
   h.installRows.forEach((r) => {
     const tr = document.createElement('tr');
-    if (r.custom) {
+    if (r.installItem) {
+      // A configured installation item (auto-listed): include checkbox + qty.
+      if (!r.include) tr.className = 'row-off';
+      tr.innerHTML = `
+        <td><input type="checkbox" data-instsel-key="${r.installKey}" ${r.include ? 'checked' : ''}> ${r.desc}</td>
+        <td class="num"><input class="cell-input num" type="number" min="0" data-instsel-qty="${r.installKey}" value="${r.qty}"></td>
+        <td class="num">${cur(r.rate)}</td>
+        <td class="num">${cur(r.subtotal)}</td>`;
+    } else if (r.custom) {
       const i = Number(r.id.split(':')[1]);
-      const instOpts = (cfg.installItems || []).map((it, idx) => `<option value="${idx}">${escapeHtml(it.name)} (R${fmt(it.rate, 0)})</option>`).join('');
       tr.innerHTML = `
         <td><button class="btn cfg-del" data-cinst-del="${i}" title="Remove">✕</button>
-            <select class="cell-input" data-cinst-pick="${i}" style="min-width:150px" title="Pick a configured installation item"><option value="">— preset —</option>${instOpts}</select>
-            <input class="cell-input" type="text" data-cinst-desc="${i}" value="${escapeHtml(r.desc)}" style="width:180px"></td>
+            <input class="cell-input" type="text" data-cinst-desc="${i}" value="${escapeHtml(r.desc)}" style="width:220px"> <span class="note" style="margin:0">one-off</span></td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-cinst-qty="${i}" value="${r.qty}"></td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-cinst-rate="${i}" value="${r.rate}"></td>
         <td class="num">${cur(r.subtotal)}</td>`;
@@ -220,6 +244,9 @@ function renderHardware() {
     }
     itb.appendChild(tr);
   });
+  const ensureInst = (k) => (deal.hardware.items.installSel[k] = deal.hardware.items.installSel[k] || { include: false, qty: deal.vehicles || 0 });
+  itb.querySelectorAll('[data-instsel-key]').forEach((cb) => cb.addEventListener('change', (e) => { ensureInst(e.target.dataset.instselKey).include = e.target.checked; recompute(); }));
+  itb.querySelectorAll('[data-instsel-qty]').forEach((el) => el.addEventListener('change', (e) => { ensureInst(e.target.dataset.instselQty).qty = Math.max(0, Number(e.target.value) || 0); recompute(); }));
   itb.querySelectorAll('[data-cinst-desc]').forEach((el) => el.addEventListener('change', (e) => { deal.hardware.items.customInstall[+e.target.dataset.cinstDesc].desc = e.target.value; recompute(); }));
   itb.querySelectorAll('[data-cinst-qty]').forEach((el) => el.addEventListener('change', (e) => { deal.hardware.items.customInstall[+e.target.dataset.cinstQty].qty = Math.max(0, Number(e.target.value) || 0); recompute(); }));
   itb.querySelectorAll('[data-cinst-rate]').forEach((el) => el.addEventListener('change', (e) => { deal.hardware.items.customInstall[+e.target.dataset.cinstRate].rate = Math.max(0, Number(e.target.value) || 0); recompute(); }));
@@ -458,13 +485,6 @@ function wireInputs() {
   document.getElementById('hw-intl').addEventListener('change', (e) => { deal.hardware.outsideSA = e.target.checked; recompute(); });
   document.getElementById('hw-dj-sku').addEventListener('change', (e) => { deal.hardware.items.djHandsetSku = e.target.value; recompute(); });
   document.getElementById('hw-sm-sku').addEventListener('change', (e) => { deal.hardware.items.smHandsetSku = e.target.value; recompute(); });
-  document.getElementById('hw-add-custom').addEventListener('click', () => {
-    const keys = Object.keys(P.getConfig().hardwareCatalog);
-    if (!deal.hardware.items.custom) deal.hardware.items.custom = [];
-    deal.hardware.items.custom.push({ key: keys[0], qty: deal.vehicles || 1 });
-    recompute();
-    document.querySelector('.tab[data-tab="hardware"]').click();
-  });
   document.getElementById('hw-add-install').addEventListener('click', () => {
     if (!deal.hardware.items.customInstall) deal.hardware.items.customInstall = [];
     deal.hardware.items.customInstall.push({ desc: 'Installation', qty: deal.vehicles || 1, rate: 0 });
