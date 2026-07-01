@@ -15,8 +15,28 @@ let presentationMode = false;
 const fmt = (n, dp = 2) =>
   (n === '' || n === null || n === undefined || Number.isNaN(n)) ? '—'
     : Number(n).toLocaleString('en-ZA', { minimumFractionDigits: dp, maximumFractionDigits: dp });
-const fmtR = (n, dp = 2) => 'R ' + fmt(n, dp);
 const pct = (n, dp = 1) => (n === '' || n == null || Number.isNaN(n)) ? '—' : (n * 100).toFixed(dp) + '%';
+
+// --- Display currency -------------------------------------------------------
+// ALL pricing is computed in Rands (ZAR). Display currency is a view-layer
+// conversion: value_in_currency = randValue / zarPerUnit[currency]. `cur` formats
+// a money value in the active display currency (no symbol); `fmtR` adds the symbol
+// (used for every total/headline, so those convert automatically). Non-money
+// numbers (hours, qty, multipliers, factors, %) keep using `fmt`.
+const CURRENCIES = {
+  ZAR: { symbol: 'R',  name: 'South African Rand' },
+  USD: { symbol: '$',  name: 'US Dollar' },
+  EUR: { symbol: '€',  name: 'Euro' },
+  GBP: { symbol: '£',  name: 'British Pound' },
+  NGN: { symbol: '₦',  name: 'Nigerian Naira' },
+};
+let displayCurrency = 'ZAR';
+try { displayCurrency = localStorage.getItem('sps_currency') || 'ZAR'; } catch (e) { /* no localStorage */ }
+let fxRates = { ZAR: 1, USD: 18.5, EUR: 20, GBP: 23.5, NGN: 0.0113 }; // zarPerUnit, refreshed from config
+function fxDivisor() { return displayCurrency === 'ZAR' ? 1 : (Number(fxRates[displayCurrency]) || 1); }
+function curSym() { return (CURRENCIES[displayCurrency] || { symbol: '' }).symbol; }
+const cur = (n, dp = 2) => fmt((Number(n) || 0) / fxDivisor(), dp);
+const fmtR = (n, dp = 2) => curSym() + ' ' + cur(n, dp);
 
 // --- Deal state -------------------------------------------------------------
 function defaultDeal() {
@@ -83,10 +103,10 @@ function renderSubscription() {
     tr.innerHTML = `
       <td><input type="checkbox" data-prod="${l.key}" ${l.selected ? 'checked' : ''}></td>
       <td>${l.name}</td>
-      <td class="num">${fmt(l.listPrice)}</td>
-      <td class="num">${fmt(l.effectivePrice)}</td>
-      <td class="num">${fmt(l.monthly)}</td>
-      <td class="num">${fmt(l.annual)}</td>`;
+      <td class="num">${cur(l.listPrice)}</td>
+      <td class="num">${cur(l.effectivePrice)}</td>
+      <td class="num">${cur(l.monthly)}</td>
+      <td class="num">${cur(l.annual)}</td>`;
     tb.appendChild(tr);
   });
   tb.querySelectorAll('input[data-prod]').forEach((cb) => {
@@ -145,16 +165,16 @@ function renderHardware() {
         <td><button class="btn cfg-del" data-custom-del="${i}" title="Remove">✕</button></td>
         <td><select class="cell-input" data-custom-key="${i}" style="min-width:180px">${catOpts(r.catalogKey)}</select> <span class="note" style="margin:0">custom</span></td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-custom-qty="${i}" value="${r.qty}"></td>
-        <td class="num">${fmt(r.unit)}</td>
-        <td class="num">${fmt(r.subtotal)}</td>`;
+        <td class="num">${cur(r.unit)}</td>
+        <td class="num">${cur(r.subtotal)}</td>`;
     } else {
       if (!r.include) tr.className = 'row-off';
       tr.innerHTML = `
         <td><input type="checkbox" data-inc="${includeKey[r.id]}" ${r.include ? 'checked' : ''}></td>
         <td>${r.desc}</td>
         <td class="num">${r.qty}</td>
-        <td class="num">${fmt(r.unit)}</td>
-        <td class="num">${fmt(r.subtotal)}</td>`;
+        <td class="num">${cur(r.unit)}</td>
+        <td class="num">${cur(r.subtotal)}</td>`;
     }
     tb.appendChild(tr);
   });
@@ -187,10 +207,10 @@ function renderHardware() {
             <input class="cell-input" type="text" data-cinst-desc="${i}" value="${escapeHtml(r.desc)}" style="width:220px"></td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-cinst-qty="${i}" value="${r.qty}"></td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-cinst-rate="${i}" value="${r.rate}"></td>
-        <td class="num">${fmt(r.subtotal)}</td>`;
+        <td class="num">${cur(r.subtotal)}</td>`;
     } else {
       if (r.subtotal === 0) tr.className = 'row-off';
-      tr.innerHTML = `<td>${r.desc}</td><td class="num">${r.qty}</td><td class="num">${fmt(r.rate)}</td><td class="num">${fmt(r.subtotal)}</td>`;
+      tr.innerHTML = `<td>${r.desc}</td><td class="num">${r.qty}</td><td class="num">${cur(r.rate)}</td><td class="num">${cur(r.subtotal)}</td>`;
     }
     itb.appendChild(tr);
   });
@@ -219,9 +239,9 @@ function renderImplementation() {
       <td>${l.desc}</td>
       <td class="num"><input class="cell-input num" type="number" min="0" step="1" data-impl="${i}" data-f="hours" value="${l.hours}"></td>
       <td><input type="checkbox" data-impl="${i}" data-f="senior" ${l.senior ? 'checked' : ''}></td>
-      <td class="num">${fmt(l.rate, 0)}</td>
+      <td class="num">${cur(l.rate, 0)}</td>
       <td class="num"><input class="cell-input num" type="number" min="0" max="100" step="1" data-impl="${i}" data-f="discount" value="${Math.round(l.discount * 100)}"></td>
-      <td class="num">${fmt(l.total)}</td>
+      <td class="num">${cur(l.total)}</td>
       <td>${status}</td>`;
     tb.appendChild(tr);
   });
@@ -273,11 +293,11 @@ function renderRental() {
 function renderQuote() {
   const q = result.clientQuote;
   const subRows = q.subscriptionItems.map((i) => `
-    <tr><td>${i.product}</td><td class="num">${i.vehicles}</td><td class="num">${fmt(i.pricePerVehicle)}</td><td class="num">${fmt(i.monthly)}</td><td class="num">${fmt(i.annual)}</td></tr>`).join('');
+    <tr><td>${i.product}</td><td class="num">${i.vehicles}</td><td class="num">${cur(i.pricePerVehicle)}</td><td class="num">${cur(i.monthly)}</td><td class="num">${cur(i.annual)}</td></tr>`).join('');
   const implRows = q.implementationItems.map((i) => `
-    <tr><td>${i.desc}</td><td class="num">${i.hours}</td><td class="num">${fmt(i.rate, 0)}</td><td class="num">${i.discount ? pct(i.discount, 0) : ''}</td><td class="num">${fmt(i.total)}</td></tr>`).join('');
+    <tr><td>${i.desc}</td><td class="num">${i.hours}</td><td class="num">${cur(i.rate, 0)}</td><td class="num">${i.discount ? pct(i.discount, 0) : ''}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
   const hwRows = q.hardwareItems.map((i) => `
-    <tr><td>${i.desc}</td><td class="num">${i.qty ?? ''}</td><td class="num">${i.unit != null ? fmt(i.unit) : ''}</td><td class="num">${fmt(i.total)}</td></tr>`).join('');
+    <tr><td>${i.desc}</td><td class="num">${i.qty ?? ''}</td><td class="num">${i.unit != null ? cur(i.unit) : ''}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
 
   document.getElementById('quote-doc').innerHTML = `
     <h1>SUNSTONE LOGISTIC SYSTEMS</h1>
@@ -290,27 +310,27 @@ function renderQuote() {
 
     <h3>Subscription Items</h3>
     <table>
-      <thead><tr><th>Product</th><th class="num">Vehicles</th><th class="num">Price/veh/mo</th><th class="num">Monthly R</th><th class="num">Annual R</th></tr></thead>
+      <thead><tr><th>Product</th><th class="num">Vehicles</th><th class="num">Price/veh/mo</th><th class="num">Monthly ${displayCurrency}</th><th class="num">Annual ${displayCurrency}</th></tr></thead>
       <tbody>${subRows || '<tr><td colspan="5">No subscription items selected.</td></tr>'}
-        <tr class="q-total"><td>Total subscription value (excl. VAT)</td><td></td><td></td><td class="num">${fmt(q.subscriptionMonthly)}</td><td class="num">${fmt(q.subscriptionAnnual)}</td></tr>
+        <tr class="q-total"><td>Total subscription value (excl. VAT)</td><td></td><td></td><td class="num">${cur(q.subscriptionMonthly)}</td><td class="num">${cur(q.subscriptionAnnual)}</td></tr>
       </tbody>
     </table>
 
     ${implRows ? `
     <h3>One-Time Implementation (Setup, Config &amp; Project Services)</h3>
     <table>
-      <thead><tr><th>Description</th><th class="num">Hours</th><th class="num">Rate R/hr</th><th class="num">Disc</th><th class="num">Total R</th></tr></thead>
+      <thead><tr><th>Description</th><th class="num">Hours</th><th class="num">Rate/hr ${displayCurrency}</th><th class="num">Disc</th><th class="num">Total ${displayCurrency}</th></tr></thead>
       <tbody>${implRows}
-        <tr class="q-total"><td>Total one-time implementation (excl. VAT)</td><td></td><td></td><td></td><td class="num">${fmt(q.implementationTotal)}</td></tr>
+        <tr class="q-total"><td>Total one-time implementation (excl. VAT)</td><td></td><td></td><td></td><td class="num">${cur(q.implementationTotal)}</td></tr>
       </tbody>
     </table>` : ''}
 
     ${hwRows ? `
     <h3>One-Time Hardware &amp; Installation</h3>
     <table>
-      <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Unit R</th><th class="num">Total R</th></tr></thead>
+      <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Unit ${displayCurrency}</th><th class="num">Total ${displayCurrency}</th></tr></thead>
       <tbody>${hwRows}
-        <tr class="q-total"><td>Total hardware &amp; installation (excl. VAT)</td><td></td><td></td><td class="num">${fmt(q.hardwareTotal)}</td></tr>
+        <tr class="q-total"><td>Total hardware &amp; installation (excl. VAT)</td><td></td><td></td><td class="num">${cur(q.hardwareTotal)}</td></tr>
       </tbody>
     </table>` : ''}
 
@@ -331,6 +351,7 @@ function renderQuote() {
       <li>Hardware and installation are once-off charges, invoiced on delivery / commissioning.</li>
       <li>Hours shown on each implementation line are estimates; variance is reconciled at project close.</li>
       <li>Quote valid for 30 days from the date shown above. All prices exclude VAT.</li>
+      <li>All amounts are shown in ${curSym()} ${displayCurrency}${displayCurrency !== 'ZAR' ? ' — converted from South African Rand at the exchange rate configured at time of quoting; final invoicing may differ with prevailing rates.' : '.'}</li>
     </ul>
     <p style="margin-top:14px;font-weight:600;">Thank you for considering Sunstone Logistic Systems.</p>`;
 }
@@ -347,10 +368,10 @@ function renderMargin() {
     tr.innerHTML = `
       <td>${r.name}</td>
       <td>${r.selected ? '☑' : '☐'}</td>
-      <td class="num">${fmt(r.revenue)}</td>
-      <td class="num">${fmt(r.marginalCost, 0)}</td>
-      <td class="num">${fmt(r.monthlyCost)}</td>
-      <td class="num">${fmt(r.contribution)}</td>
+      <td class="num">${cur(r.revenue)}</td>
+      <td class="num">${cur(r.marginalCost, 0)}</td>
+      <td class="num">${cur(r.monthlyCost)}</td>
+      <td class="num">${cur(r.contribution)}</td>
       <td class="num">${pct(r.grossMargin)}</td>
       <td style="${warnColor}">${r.stepWarning}</td>`;
     tb.appendChild(tr);
@@ -378,10 +399,10 @@ function renderMargin() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${r.name}</td>
-      <td class="num">${fmt(r.marginalCost, 0)}</td>
-      <td class="num">${fmt(r.floor50)}</td>
-      <td class="num">${fmt(r.floor60)}</td>
-      <td class="num">${fmt(r.effectivePrice)}</td>
+      <td class="num">${cur(r.marginalCost, 0)}</td>
+      <td class="num">${cur(r.floor50)}</td>
+      <td class="num">${cur(r.floor60)}</td>
+      <td class="num">${cur(r.effectivePrice)}</td>
       <td style="color:${color}">${r.floorStatus}</td>`;
     ftb.appendChild(tr);
   });
@@ -565,6 +586,48 @@ async function loadConfig() {
     if (res && res.config) P.setConfig(res.config); // else keep built-in defaults
   } catch (e) { /* offline → defaults */ }
   editCfg = P.getConfig();
+  refreshFx();
+}
+
+// Pull the active exchange rates (zarPerUnit) into the view-layer formatter.
+function refreshFx() {
+  const c = P.getConfig().currency || {};
+  fxRates = Object.assign({ ZAR: 1, USD: 18.5, EUR: 20, GBP: 23.5, NGN: 0.0113 }, c.zarPerUnit || {}, { ZAR: 1 });
+}
+
+function initCurrencySelector() {
+  const sel = document.getElementById('currency-select');
+  if (!CURRENCIES[displayCurrency]) displayCurrency = 'ZAR';
+  sel.innerHTML = Object.keys(CURRENCIES)
+    .map((c) => `<option value="${c}" ${c === displayCurrency ? 'selected' : ''}>${CURRENCIES[c].symbol} ${c}</option>`).join('');
+  sel.addEventListener('change', (e) => {
+    displayCurrency = e.target.value;
+    try { localStorage.setItem('sps_currency', displayCurrency); } catch (_) { /* ignore */ }
+    if (result) renderAll();
+  });
+}
+
+// Fetch live ZAR exchange rates into the config editor (user still Saves to apply).
+async function fetchLiveRates() {
+  const msg = document.getElementById('fx-fetch-msg');
+  if (msg) { msg.textContent = 'Fetching…'; msg.style.color = 'var(--text-dim)'; }
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/ZAR');
+    const data = await res.json();
+    if (!data || !data.rates) throw new Error('no rates in response');
+    ['USD', 'EUR', 'GBP', 'NGN'].forEach((code) => {
+      const r = Number(data.rates[code]);
+      if (r > 0) editCfg.currency.zarPerUnit[code] = 1 / r;
+    });
+    editCfg.currency.zarPerUnit.ZAR = 1;
+    editCfg.currency.updatedAt = new Date().toISOString();
+    renderConfig();
+    const m2 = document.getElementById('fx-fetch-msg');
+    if (m2) { m2.textContent = 'Live rates loaded — click Save configuration to apply.'; m2.style.color = 'var(--good)'; }
+  } catch (e) {
+    const m2 = document.getElementById('fx-fetch-msg');
+    if (m2) { m2.textContent = 'Fetch failed (' + e.message + '). Enter rates manually.'; m2.style.color = 'var(--bad)'; }
+  }
 }
 
 const getPath = (o, path) => path.split('.').reduce((x, k) => (x == null ? x : x[k]), o);
@@ -694,6 +757,31 @@ function renderConfig() {
           <tr><td>Renewal support fee (%/mo of hardware)</td><td>${numIn('rental.renewalSupportFeeMonthly', 'pct')}</td></tr>
         </table>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>Currency &amp; Exchange Rates</h2>
+      <table class="kv compact">
+        <tr><td>Rate mode</td><td>
+          <label><input type="radio" name="curmode" value="manual" ${c.currency.mode !== 'auto' ? 'checked' : ''}> Manual</label>
+          <label style="margin-left:14px"><input type="radio" name="curmode" value="auto" ${c.currency.mode === 'auto' ? 'checked' : ''}> Auto (live)</label>
+          <button class="btn" id="cfg-fetch-fx" type="button" style="margin-left:14px">↻ Fetch live rates now</button>
+          <span id="fx-fetch-msg" class="note" style="margin:0 0 0 8px"></span>
+        </td></tr>
+        ${c.currency.updatedAt ? `<tr class="subtle"><td>Rates last fetched</td><td>${new Date(c.currency.updatedAt).toLocaleString()}</td></tr>` : ''}
+      </table>
+      <table class="data">
+        <thead><tr><th>Currency</th><th class="num">1 unit = R (Rand)</th><th class="num">≈ per R1</th></tr></thead>
+        <tbody>
+          ${['USD', 'EUR', 'GBP', 'NGN'].map((code) => `
+            <tr>
+              <td>${CURRENCIES[code].symbol} ${code} — ${CURRENCIES[code].name}</td>
+              <td class="num">${numIn('currency.zarPerUnit.' + code, 'num')}</td>
+              <td class="num" data-derived="fx:${code}"></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <p class="note">Base currency is Rand (ZAR = 1). Enter how many Rand one unit of each currency is worth, or click “Fetch live rates”. The display-currency toggle (top-right) converts every figure across the app using these rates. Rates are shared and saved with the configuration.</p>
     </div>`;
 
   refreshDerived();
@@ -705,6 +793,7 @@ function refreshDerived() {
     if (type === 'plist') { const p = editCfg.products[+idx]; el.textContent = fmt(p.targetGM < 1 ? p.marginalCost / (1 - p.targetGM) : 0); }
     else if (type === 'hsell') { const it = editCfg.hardwareCatalog[idx]; el.textContent = fmt((it.cost || 0) * (1 + editCfg.hardwareMarkup)); }
     else if (type === 'rate') { el.textContent = pct(editCfg.rental.costOfCapital + editCfg.rental.financingMargin); }
+    else if (type === 'fx') { const z = Number(editCfg.currency.zarPerUnit[idx]); el.textContent = z > 0 ? (CURRENCIES[idx].symbol + ' ' + (1 / z).toFixed(4)) : '—'; }
   });
 }
 
@@ -721,6 +810,7 @@ function wireConfig() {
       if (!el.checked && at > -1) arr.splice(at, 1);
       return;
     }
+    if (el.name === 'curmode') { editCfg.currency.mode = el.value; return; }
     const path = el.dataset.path;
     if (!path) return;
     const kind = el.dataset.kind;
@@ -733,6 +823,7 @@ function wireConfig() {
   });
 
   root.addEventListener('click', (e) => {
+    if (e.target.id === 'cfg-fetch-fx') { fetchLiveRates(); return; }
     const add = e.target.dataset.add;
     const del = e.target.dataset.del;
     if (add) {
@@ -759,6 +850,7 @@ function wireConfig() {
       const normalized = P.setConfig(editCfg);
       await api('PUT', '/api/config', { config: normalized });
       editCfg = P.getConfig();
+      refreshFx(); // pick up any changed exchange rates
       // Rebuild the current deal's product selection/activities against the new config,
       // preserving existing selections where the product still exists.
       reconcileDealWithConfig();
@@ -800,8 +892,9 @@ function reconcileDealWithConfig() {
 
 // --- Init -------------------------------------------------------------------
 async function init() {
-  await loadConfig();          // apply shared config before first render
+  await loadConfig();          // apply shared config (incl. FX rates) before first render
   deal = defaultDeal();        // build defaults from the (now loaded) config
+  initCurrencySelector();
   wireInputs();
   wireConfig();
   syncInputsFromDeal();

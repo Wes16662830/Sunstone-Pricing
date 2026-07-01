@@ -86,7 +86,18 @@
 
     // Rental config. annualRate = costOfCapital + financingMargin.
     rental: { costOfCapital: 0.13, financingMargin: 0.05, renewalSupportFeeMonthly: 0.0075, terms: [12, 24, 36] },
+
+    // Display currency. Base of ALL pricing is ZAR; these are display conversions.
+    // zarPerUnit = how many Rand 1 unit of the currency is worth (ZAR is always 1).
+    // mode 'manual' = rates entered by hand; 'auto' = fetched from a live source.
+    // Placeholder rates below are approximate — set them manually or fetch live.
+    currency: {
+      mode: 'manual',
+      zarPerUnit: { ZAR: 1, USD: 18.5, EUR: 20, GBP: 23.5, NGN: 0.0113 },
+      updatedAt: null,
+    },
   };
+  const CURRENCY_DEFAULTS = { ZAR: 1, USD: 18.5, EUR: 20, GBP: 23.5, NGN: 0.0113 };
 
   // ---------------------------------------------------------------------------
   // ACTIVE CONFIG + accessors
@@ -136,6 +147,11 @@
         discount: num(a.discount, 0), product: a.product || undefined, note: a.note || undefined,
       })) : clone(d.implActivities),
       rental: Object.assign({}, d.rental, cfg.rental || {}),
+      currency: {
+        mode: (cfg.currency && cfg.currency.mode) === 'auto' ? 'auto' : 'manual',
+        zarPerUnit: Object.assign({}, CURRENCY_DEFAULTS, (cfg.currency && cfg.currency.zarPerUnit) || {}, { ZAR: 1 }),
+        updatedAt: (cfg.currency && cfg.currency.updatedAt) || null,
+      },
     };
   }
 
