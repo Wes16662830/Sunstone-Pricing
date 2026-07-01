@@ -99,11 +99,12 @@
         <table class="kv compact" id="hw-totals"></table>
       </div>
       <div class="card">
-        <h2>Installation (auto-computed)</h2>
+        <h2>Installation (auto-computed) <button class="btn cfg-add" id="hw-add-install">＋ Add installation</button></h2>
         <table class="data" id="hw-install-table">
           <thead><tr><th>Scenario</th><th class="num">Qty</th><th class="num">Rate R</th><th class="num">Subtotal R</th></tr></thead>
           <tbody id="hw-install-tbody"></tbody>
         </table>
+        <p class="note">The four standard rows are auto-computed from your hardware selections. Use “＋ Add installation” for a manual installation line (description, qty, rate) that flows into the grand total and the quote.</p>
         <table class="kv compact" id="hw-grand"></table>
       </div>
     </section>
@@ -114,7 +115,7 @@
         <h2>Implementation Activities (time &amp; materials)</h2>
         <p class="note">Training rows only bill when the matching product is selected on Subscription — shown greyed as “not billed” otherwise.</p>
         <table class="data" id="impl-table">
-          <thead><tr><th>Activity</th><th class="num">Hours</th><th>Senior?</th><th class="num">Rate R/hr</th><th class="num">Discount %</th><th class="num">Total R</th><th>Status</th></tr></thead>
+          <thead><tr><th>On</th><th>Activity</th><th class="num">Hours</th><th>Senior?</th><th class="num">Rate R/hr</th><th class="num">Discount %</th><th class="num">Total R</th><th>Status</th></tr></thead>
           <tbody id="impl-tbody"></tbody>
         </table>
         <table class="kv compact" id="impl-totals"></table>

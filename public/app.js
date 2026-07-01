@@ -32,7 +32,8 @@ function defaultDeal() {
         smHandsetSku: 'oukitelG1S', smHandsetInclude: false,
         printerInclude: false, vehicleGpsInclude: false, trailerGpsInclude: false,
         fuelKitSingleInclude: false, fuelKitDualInclude: false,
-        custom: [], // additional catalogued items added to this quote: [{ key, qty }]
+        custom: [],        // additional catalogued items: [{ key, qty }]
+        customInstall: [], // additional installation lines: [{ desc, qty, rate }]
       },
     },
     implementation: { activities: P.IMPL_ACTIVITIES.map((a) => ({ ...a })) },
@@ -179,10 +180,24 @@ function renderHardware() {
   itb.innerHTML = '';
   h.installRows.forEach((r) => {
     const tr = document.createElement('tr');
-    if (r.subtotal === 0) tr.className = 'row-off';
-    tr.innerHTML = `<td>${r.desc}</td><td class="num">${r.qty}</td><td class="num">${fmt(r.rate)}</td><td class="num">${fmt(r.subtotal)}</td>`;
+    if (r.custom) {
+      const i = Number(r.id.split(':')[1]);
+      tr.innerHTML = `
+        <td><button class="btn cfg-del" data-cinst-del="${i}" title="Remove">✕</button>
+            <input class="cell-input" type="text" data-cinst-desc="${i}" value="${escapeHtml(r.desc)}" style="width:220px"></td>
+        <td class="num"><input class="cell-input num" type="number" min="0" data-cinst-qty="${i}" value="${r.qty}"></td>
+        <td class="num"><input class="cell-input num" type="number" min="0" data-cinst-rate="${i}" value="${r.rate}"></td>
+        <td class="num">${fmt(r.subtotal)}</td>`;
+    } else {
+      if (r.subtotal === 0) tr.className = 'row-off';
+      tr.innerHTML = `<td>${r.desc}</td><td class="num">${r.qty}</td><td class="num">${fmt(r.rate)}</td><td class="num">${fmt(r.subtotal)}</td>`;
+    }
     itb.appendChild(tr);
   });
+  itb.querySelectorAll('[data-cinst-desc]').forEach((el) => el.addEventListener('change', (e) => { deal.hardware.items.customInstall[+e.target.dataset.cinstDesc].desc = e.target.value; recompute(); }));
+  itb.querySelectorAll('[data-cinst-qty]').forEach((el) => el.addEventListener('change', (e) => { deal.hardware.items.customInstall[+e.target.dataset.cinstQty].qty = Math.max(0, Number(e.target.value) || 0); recompute(); }));
+  itb.querySelectorAll('[data-cinst-rate]').forEach((el) => el.addEventListener('change', (e) => { deal.hardware.items.customInstall[+e.target.dataset.cinstRate].rate = Math.max(0, Number(e.target.value) || 0); recompute(); }));
+  itb.querySelectorAll('[data-cinst-del]').forEach((el) => el.addEventListener('click', (e) => { deal.hardware.items.customInstall.splice(+e.target.dataset.cinstDel, 1); recompute(); }));
   document.getElementById('hw-grand').innerHTML = `
     <tr><td>Installation subtotal</td><td>${fmtR(h.installSubtotal)}</td></tr>
     <tr class="total"><td>GRAND TOTAL — Hardware + Installation</td><td>${fmtR(h.grandTotal)}</td></tr>`;
@@ -196,10 +211,11 @@ function renderImplementation() {
   im.lines.forEach((l, i) => {
     const tr = document.createElement('tr');
     if (!l.billed) tr.className = 'row-off';
-    const status = l.product
-      ? (l.billed ? 'Billed (product selected)' : 'Not billed (product off)')
-      : (l.note || '—');
+    const status = !l.enabled
+      ? 'Off (excluded)'
+      : (l.product ? (l.billed ? 'Billed (product selected)' : 'Not billed (product off)') : (l.note || '—'));
     tr.innerHTML = `
+      <td style="text-align:center"><input type="checkbox" data-impl="${i}" data-f="enabled" ${l.enabled ? 'checked' : ''} title="Include this activity"></td>
       <td>${l.desc}</td>
       <td class="num"><input class="cell-input num" type="number" min="0" step="1" data-impl="${i}" data-f="hours" value="${l.hours}"></td>
       <td><input type="checkbox" data-impl="${i}" data-f="senior" ${l.senior ? 'checked' : ''}></td>
@@ -214,6 +230,7 @@ function renderImplementation() {
       const i = Number(e.target.dataset.impl), f = e.target.dataset.f;
       const a = deal.implementation.activities[i];
       if (f === 'senior') a.senior = e.target.checked;
+      else if (f === 'enabled') a.enabled = e.target.checked;
       else if (f === 'discount') a.discount = Math.max(0, Math.min(100, Number(e.target.value))) / 100;
       else if (f === 'hours') a.hours = Math.max(0, Number(e.target.value));
       recompute();
@@ -405,6 +422,12 @@ function wireInputs() {
     const keys = Object.keys(P.getConfig().hardwareCatalog);
     if (!deal.hardware.items.custom) deal.hardware.items.custom = [];
     deal.hardware.items.custom.push({ key: keys[0], qty: deal.vehicles || 1 });
+    recompute();
+    document.querySelector('.tab[data-tab="hardware"]').click();
+  });
+  document.getElementById('hw-add-install').addEventListener('click', () => {
+    if (!deal.hardware.items.customInstall) deal.hardware.items.customInstall = [];
+    deal.hardware.items.customInstall.push({ desc: 'Installation', qty: deal.vehicles || 1, rate: 0 });
     recompute();
     document.querySelector('.tab[data-tab="hardware"]').click();
   });

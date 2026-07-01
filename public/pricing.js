@@ -266,12 +266,19 @@
     const shippingSurcharge = input.outsideSA ? hardwareSubtotal * activeConfig.intlShippingSurcharge : 0;
     const hardwareTotal = hardwareSubtotal + shippingSurcharge;
 
-    const installRows = [
+    const baseInstall = [
       { id: 'gpsInstall',        desc: 'GPS Tracking installation',                 qty: it.vehicleGpsInclude ? trackingOnlyQty : 0, rate: ir.gpsAlone },
       { id: 'fuelKitSingleInst', desc: 'Fuel Probe Kit installation — single-tank', qty: it.fuelKitSingleInclude ? single : 0,       rate: ir.fuelKitSingle },
       { id: 'fuelKitDualInst',   desc: 'Fuel Probe Kit installation — dual-tank',   qty: it.fuelKitDualInclude ? dual : 0,           rate: ir.fuelKitDual },
       { id: 'trailerInstall',    desc: 'Trailer GPS installation',                  qty: it.trailerGpsInclude ? trailerQty : 0,      rate: ir.trailerGps },
-    ].map((r) => ({ ...r, subtotal: r.qty * r.rate }));
+    ];
+
+    // Manually-added installation lines: [{ desc, qty, rate }].
+    (it.customInstall || []).forEach((ci, i) => {
+      baseInstall.push({ id: 'customInstall:' + i, custom: true, desc: ci.desc || 'Installation', qty: Number(ci.qty) || 0, rate: Number(ci.rate) || 0 });
+    });
+
+    const installRows = baseInstall.map((r) => ({ ...r, subtotal: r.qty * r.rate }));
 
     const installSubtotal = installRows.reduce((s, r) => s + r.subtotal, 0);
 
@@ -293,12 +300,13 @@
 
     const lines = activities.map((a) => {
       const rate = a.senior ? rates.senior : rates.consultant;
+      const enabled = a.enabled !== false; // per-quote on/off toggle (default on)
       const productSelected = a.product ? !!selected[a.product] : true;
-      const billed = productSelected;
+      const billed = enabled && productSelected;
       const total = billed ? a.hours * rate * (1 - a.discount) : 0;
       return {
         desc: a.desc, hours: a.hours, senior: !!a.senior, rate,
-        discount: a.discount, product: a.product || null, billed, total, note: a.note || null,
+        discount: a.discount, product: a.product || null, enabled, billed, total, note: a.note || null,
       };
     });
 
