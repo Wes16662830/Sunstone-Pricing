@@ -174,8 +174,17 @@ the project across deploys, so CI never touches them. The D1 schema is a one-tim
 out of the deploy job to keep it simple. Once the two secrets exist and you've run
 `pages project create` once, every push deploys with no further action.
 
-Note: the workflow reads the D1 binding from `wrangler.toml`, so put your real
-`database_id` there (it isn't a secret) before relying on CI deploys.
+You do **not** need to hand-edit the `database_id` in `wrangler.toml` for CI: the
+workflow looks up (or creates) the `sunstone-quotes` D1 database in your account
+and injects the real id at deploy time. (The committed placeholder id is only a
+stand-in that lets local `wrangler pages dev` run.) If you deploy **manually** with
+`wrangler pages deploy` from your machine, you still must put the real id in
+`wrangler.toml` first — otherwise Cloudflare rejects the all-zeros placeholder with
+`Error 8000022: Invalid database UUID`.
+
+The one-time bootstrap the workflow does **not** do (so the app isn't locked out on
+first deploy): create the Pages project and set its `PASSWORD` / `SESSION_SECRET`
+Pages secrets — run those once (see the comment block in `deploy.yml`).
 
 ## Calculation model (verified against the workbook)
 
