@@ -96,21 +96,21 @@
         </div>
       </div>
       <div class="card">
-        <h2>Hardware Items <button class="btn cfg-add" id="hw-add-custom">＋ Add item</button></h2>
+        <h2>Hardware Items</h2>
         <table class="data" id="hw-table">
           <thead><tr><th>Include</th><th>Item</th><th class="num">Qty</th><th class="num">Unit Sell</th><th class="num">Subtotal</th></tr></thead>
           <tbody id="hw-tbody"></tbody>
         </table>
-        <p class="note">“＋ Add item” adds any catalogued SKU (including ones you created in Config) with a manual quantity — it flows into the hardware total and the customer quote. (Installation is not auto-added for these.)</p>
+        <p class="note">Every catalogued item appears here — tick to include and set the quantity. Handsets are chosen via the dropdowns above; GPS / printer / fuel-kit quantities come from the fleet composition. Add or edit items in Config → Hardware Catalog.</p>
         <table class="kv compact" id="hw-totals"></table>
       </div>
       <div class="card">
-        <h2>Installation (auto-computed) <button class="btn cfg-add" id="hw-add-install">＋ Add installation</button></h2>
+        <h2>Installation <button class="btn cfg-add" id="hw-add-install">＋ Add one-off</button></h2>
         <table class="data" id="hw-install-table">
           <thead><tr><th>Scenario</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Subtotal</th></tr></thead>
           <tbody id="hw-install-tbody"></tbody>
         </table>
-        <p class="note">The four standard rows are auto-computed from your hardware selections. Use “＋ Add installation” for a manual installation line (description, qty, rate) that flows into the grand total and the quote.</p>
+        <p class="note">The first rows are auto-computed from your hardware selections; every configured installation item then appears as a tickable row (set the quantity). Add installation items in Config → Installation Items, or use “＋ Add one-off” for a manual line not in the catalog.</p>
         <table class="kv compact" id="hw-grand"></table>
       </div>
     </section>
