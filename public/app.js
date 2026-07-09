@@ -643,6 +643,7 @@ function initCurrencySelector() {
     displayCurrency = e.target.value;
     try { localStorage.setItem('sps_currency', displayCurrency); } catch (_) { /* ignore */ }
     if (result) renderAll();
+    refreshDerived(); // update the Config page's converted figures too
   });
 }
 
@@ -848,10 +849,17 @@ function renderConfig() {
 }
 
 function refreshDerived() {
+  // Config is authored in Rands. For the read-only derived figures (list price,
+  // sell price) also show the value converted to the active display currency,
+  // as a sanity-check, without changing what is stored (always ZAR).
+  const zarWithConv = (zar) => {
+    const base = 'R ' + fmt(zar);
+    return displayCurrency === 'ZAR' ? base : `${base} (${curSym()} ${cur(zar)})`;
+  };
   document.querySelectorAll('#config-root [data-derived]').forEach((el) => {
     const [type, idx] = el.dataset.derived.split(':');
-    if (type === 'plist') { const p = editCfg.products[+idx]; el.textContent = fmt(p.targetGM < 1 ? p.marginalCost / (1 - p.targetGM) : 0); }
-    else if (type === 'hsell') { const it = editCfg.hardwareCatalog[idx]; el.textContent = fmt((it.cost || 0) * (1 + editCfg.hardwareMarkup)); }
+    if (type === 'plist') { const p = editCfg.products[+idx]; el.textContent = zarWithConv(p.targetGM < 1 ? p.marginalCost / (1 - p.targetGM) : 0); }
+    else if (type === 'hsell') { const it = editCfg.hardwareCatalog[idx]; el.textContent = zarWithConv((it.cost || 0) * (1 + editCfg.hardwareMarkup)); }
     else if (type === 'rate') { el.textContent = pct(editCfg.rental.costOfCapital + editCfg.rental.financingMargin); }
     else if (type === 'fx') { const z = Number(editCfg.currency.zarPerUnit[idx]); el.textContent = z > 0 ? (CURRENCIES[idx].symbol + ' ' + (1 / z).toFixed(4)) : '—'; }
   });
