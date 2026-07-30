@@ -45,6 +45,7 @@
     <button class="tab" data-tab="implementation">Implementation</button>
     <button class="tab" data-tab="rental">Rental</button>
     <button class="tab" data-tab="quote">Customer Quote</button>
+    <button class="tab" data-tab="proposal">Proposal</button>
     <button class="tab tab-internal unlocked" data-tab="margin" id="tab-margin">Internal Margin</button>
     <button class="tab tab-internal unlocked" data-tab="config" id="tab-config">⚙ Config</button>
   </nav>
@@ -166,6 +167,23 @@
       </div>
     </section>
 
+    <!-- PROPOSAL (client-facing narrative + commercials; built from the client-safe quote) -->
+    <section class="panel" data-panel="proposal">
+      <div class="banner banner-info">Generate a client-ready proposal from the current deal. Narrative sections are pre-written from Sunstone’s standard copy and the products you selected — edit any of them below. Commercials are pulled from the client-safe quote (no cost or margin data).</div>
+      <div class="card no-print proposal-controls">
+        <div class="pc-row">
+          <button id="prop-print" class="btn btn-primary">🖨 Print / Save PDF</button>
+          <button id="prop-regen" class="btn">↺ Regenerate from deal</button>
+          <span class="note">Edits are kept with the quote when you save it. “Regenerate” discards edits and rebuilds from the current products &amp; pricing.</span>
+        </div>
+        <div id="prop-fields"></div>
+      </div>
+      <div class="card quote-doc proposal-doc" id="proposal-doc"></div>
+      <div class="card no-print">
+        <button id="prop-print2" class="btn">🖨 Print / Save PDF</button>
+      </div>
+    </section>
+
     <!-- INTERNAL MARGIN (visible to signed-in internal staff; hidden in Presentation mode) -->
     <section class="panel" data-panel="margin">
       <div id="margin-content">
@@ -225,6 +243,7 @@
   <button id="drawer-toggle" class="drawer-toggle">📁 Quotes</button>
 
   <script src="/pricing.js"></script>
+  <script src="/proposal.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>
