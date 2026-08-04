@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sunstone — Pricing</title>
+  <style>
+    :root {
+      --bg:#f4f6f8; --panel:#ffffff; --line:#e2e7ec; --text:#1a2029; --dim:#5a6673;
+      --accent:#f5a623; --accent-ink:#1a1408; --good:#1c7a3f; --soft:#eef1f5;
+      --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      --mono:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px; line-height:1.45; }
+    .topbar { display:flex; align-items:center; gap:16px; padding:14px 22px; background:var(--panel);
+      border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+    .brand { display:flex; align-items:center; gap:10px; flex:1; }
+    .logo { font-size:26px; color:var(--accent); }
+    .brand-title { font-weight:700; font-size:15px; }
+    .brand-sub { font-size:11px; color:var(--dim); }
+    .topbar select, .btn {
+      font:inherit; font-size:13px; padding:7px 11px; border:1px solid var(--line);
+      border-radius:6px; background:#fff; color:var(--text); cursor:pointer; }
+    .btn:hover { border-color:var(--accent); }
+    .btn-primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600; }
+    .btn-primary:hover { background:#ffb733; }
+    main { max-width:900px; margin:22px auto; padding:0 18px 60px; }
+    .grid { display:grid; grid-template-columns:1.3fr 1fr; gap:18px; align-items:start; }
+    @media (max-width:780px){ .grid { grid-template-columns:1fr; } }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px 20px;
+      margin-bottom:18px; box-shadow:0 2px 10px rgba(20,30,50,.04); }
+    h1 { font-size:19px; margin:0 0 4px; }
+    .lede { color:var(--dim); font-size:13px; margin:0 0 4px; }
+    h2 { font-size:12px; text-transform:uppercase; letter-spacing:.6px; color:var(--dim); margin:0 0 12px; }
+    .field { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
+    .field label { font-size:12px; color:var(--dim); }
+    .field input { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--text); }
+    .inline { display:flex; gap:14px; flex-wrap:wrap; }
+    .inline .field { flex:1; min-width:130px; }
+    .prod { display:flex; align-items:center; gap:11px; padding:10px 4px; border-bottom:1px solid var(--soft); }
+    .prod:last-child { border-bottom:none; }
+    .prod input[type=checkbox] { width:18px; height:18px; accent-color:var(--accent); }
+    .prod .pname { font-weight:600; }
+    .prod .pmeta { font-size:12px; color:var(--dim); }
+    .prod .pprice { margin-left:auto; text-align:right; font-family:var(--mono); font-size:13px; white-space:nowrap; }
+    .result { position:sticky; top:78px; }
+    .result .big { font-family:var(--mono); font-size:30px; font-weight:700; }
+    .result .big small { font-size:14px; color:var(--dim); font-weight:400; }
+    .result .sub { color:var(--dim); font-size:13px; margin-top:2px; }
+    .rrow { display:flex; justify-content:space-between; padding:8px 0; border-top:1px solid var(--soft); font-size:13px; }
+    .rrow.head { border-top:none; }
+    .rrow .v { font-family:var(--mono); }
+    .disc { margin-top:12px; padding:10px 12px; background:#f6f2e8; border:1px solid #ecdfc4; border-radius:7px; font-size:12px; color:#6b5320; }
+    .cnote { margin-top:10px; font-size:12px; color:var(--dim); }
+    .note-warn { color:#8a5a24; }
+    .foot { font-size:12px; color:var(--dim); margin-top:8px; }
+    /* Printable quote */
+    .qdoc { background:#fff; color:#1a1a1a; }
+    .qdoc h3 { font-size:12px; text-transform:uppercase; letter-spacing:.7px; color:#888;
+      border-bottom:1px solid #ddd; padding-bottom:4px; margin:0 0 8px; }
+    .qdoc table { width:100%; border-collapse:collapse; font-size:13px; }
+    .qdoc th, .qdoc td { padding:6px 6px; border-bottom:1px solid #eee; text-align:left; }
+    .qdoc td.num, .qdoc th.num { text-align:right; font-family:var(--mono); }
+    .qdoc tr.total td { font-weight:700; border-top:2px solid #ccc; border-bottom:none; }
+    .qmeta { display:flex; gap:26px; flex-wrap:wrap; font-size:13px; margin-bottom:12px; }
+    .qmeta span { color:#888; }
+    @media print {
+      body { background:#fff; }
+      body * { visibility:hidden; }
+      #quote-doc, #quote-doc * { visibility:visible; }
+      #quote-doc { position:absolute; left:0; top:0; width:100%; display:block !important;
+        border:none; box-shadow:none; padding:0; margin:0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◧</span>
+      <div>
+        <div class="brand-title">Sunstone Pricing</div>
+        <div class="brand-sub">Self-service subscription quote</div>
+      </div>
+    </div>
+    <label class="no-print" title="Display currency">
+      <select id="currency"></select>
+    </label>
+    <button class="btn no-print" id="signout">Sign out</button>
+  </header>
+
+  <main>
+    <div class="card" id="panel-intro">
+      <h1>Build your subscription quote</h1>
+      <p class="lede">Choose the products you're interested in and enter your fleet size — you'll see indicative monthly and annual pricing instantly, with volume and bundle discounts applied automatically.</p>
+    </div>
+
+    <div class="grid">
+      <div>
+        <div class="card" id="panel-inputs">
+          <h2>Your details</h2>
+          <div class="field">
+            <label for="in-customer">Company name (optional)</label>
+            <input id="in-customer" type="text" placeholder="Your company" />
+          </div>
+          <div class="inline">
+            <div class="field">
+              <label for="in-vehicles">Fleet size (vehicles)</label>
+              <input id="in-vehicles" type="number" min="0" step="1" value="20" />
+            </div>
+            <div class="field" id="field-users" style="display:none">
+              <label for="in-users">Number of users</label>
+              <input id="in-users" type="number" min="0" step="1" value="0" />
+            </div>
+          </div>
+        </div>
+
+        <div class="card" id="panel-products">
+          <h2>Products</h2>
+          <div id="product-list"></div>
+        </div>
+      </div>
+
+      <div class="card result" id="panel-result">
+        <h2>Your estimate</h2>
+        <div class="big" id="r-monthly">—</div>
+        <div class="sub">per month <span id="r-permo-cur"></span></div>
+        <div class="rrow head"><span>Annual</span><span class="v" id="r-annual">—</span></div>
+        <div class="rrow"><span>Blended / vehicle / month</span><span class="v" id="r-pervehicle">—</span></div>
+        <div id="r-disc"></div>
+        <div id="r-notes"></div>
+        <button class="btn btn-primary no-print" id="btn-print" style="width:100%;margin-top:14px">🖨 Print / Save PDF</button>
+        <p class="foot">Indicative subscription pricing, excl. VAT. Hardware and implementation are quoted separately.</p>
+      </div>
+    </div>
+
+    <!-- Printable client quote -->
+    <div class="card qdoc" id="quote-doc" style="display:none"></div>
+  </main>
+
+  <script src="/quote.js"></script>
+</body>
+</html>
