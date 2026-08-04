@@ -746,6 +746,12 @@ function wireInputs() {
     });
   });
 
+  // Theme toggle (sync button label to the theme applied by the inline script).
+  applyTheme(currentTheme());
+  document.getElementById('btn-theme').addEventListener('click', () => {
+    applyTheme(currentTheme() === 'light' ? 'dark' : 'light');
+  });
+
   // Presentation mode toggle (on-screen deterrent only — see comment at top).
   document.getElementById('btn-present').addEventListener('click', () => setPresentationMode(!presentationMode));
 
@@ -774,6 +780,23 @@ function setPresentationMode(on) {
     internalTabs.forEach((id) => document.getElementById(id).classList.remove('hidden'));
     badge.textContent = 'INTERNAL VIEW'; badge.className = 'view-badge internal';
     btn.textContent = '👁 Presentation mode';
+  }
+}
+
+// --- Theme (light / dark) ---------------------------------------------------
+// The theme is applied to <html data-theme> by an inline script in index.html
+// (before first paint, to avoid a flash) and persisted in localStorage.
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
+function applyTheme(theme) {
+  const t = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem('sps_theme', t); } catch (e) { /* no localStorage */ }
+  const btn = document.getElementById('btn-theme');
+  if (btn) {
+    btn.textContent = t === 'light' ? '☀ Light' : '🌙 Dark';
+    btn.title = 'Switch to ' + (t === 'light' ? 'dark' : 'light') + ' theme';
   }
 }
 

@@ -15,6 +15,31 @@
   --mono: "SF Mono", "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+
+/* Light theme — activated by data-theme="light" on <html>. The client-facing
+   quote / proposal documents stay "paper" light in both themes by design. */
+:root[data-theme="light"] {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --panel-2: #eef1f5;
+  --line: #d5dbe2;
+  --text: #1a2029;
+  --text-dim: #5a6673;
+  --accent-2: #1f6fd6;
+}
+:root[data-theme="light"] .headline {
+  background: linear-gradient(135deg, #fdf1d8, #fae7bd); border-color: #e6c98a;
+}
+:root[data-theme="light"] .headline .big { color: #b9760a; }
+:root[data-theme="light"] .banner-warn { background: #fdecea; border-color: #f3b7b0; color: #8a2018; }
+:root[data-theme="light"] .banner-info { background: #e8f1fb; border-color: #b9d5f2; color: #1c4e86; }
+:root[data-theme="light"] .warn-copy { color: #8a5a24; }
+:root[data-theme="light"] .view-badge.client { background: #e3f5ea; color: #1c7a3f; border-color: #b6e2c6; }
+:root[data-theme="light"] .view-badge.internal { background: #fdf0dd; color: #9a6410; border-color: #f0d6a6; }
+:root[data-theme="light"] .tab-internal.locked,
+:root[data-theme="light"] table.data tr.row-off td { color: #9aa4b0; }
+:root[data-theme="light"] table.data tr.row-off { background: rgba(0,0,0,.02); }
+
 * { box-sizing: border-box; }
 body {
   margin: 0; background: var(--bg); color: var(--text);

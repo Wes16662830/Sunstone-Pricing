@@ -4,6 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sunstone Pricing Calculator</title>
+  <script>
+    // Apply the saved (or OS-preferred) theme before first paint to avoid a flash.
+    (function () {
+      try {
+        var t = localStorage.getItem('sps_theme');
+        if (t !== 'light' && t !== 'dark') {
+          t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
+    })();
+  </script>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -34,6 +46,7 @@
         <select id="currency-select" class="cell-input"></select>
       </label>
       <div id="view-badge" class="view-badge internal" title="Current on-screen mode">INTERNAL VIEW</div>
+      <button id="btn-theme" class="btn" title="Toggle light / dark theme">🌙 Dark</button>
       <button id="btn-present" class="btn" title="Hide internal cost/margin on screen for client-facing presentation">👁 Presentation mode</button>
       <button id="btn-logout" class="btn">Sign out</button>
     </div>
