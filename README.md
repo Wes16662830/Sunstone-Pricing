@@ -85,6 +85,14 @@ Access is a **separate password** from the internal one — set `CLIENT_PASSWORD
 Share the `/quote` link and that access code with your customer; it never unlocks
 the internal margin/config tool.
 
+There is also a read-only **price-list page at `/prices`** (same client password):
+a single reference sheet of all standard list pricing and published discount
+levels — subscription prices, the multi-product bundle schedule, fleet volume
+tiers, hardware sell prices and installation rates — currency-aware and printable.
+It's fed by `GET /api/client/pricelist`, which is margin-safe by the same
+construction as the quote endpoints (list/sell prices and discount percentages
+only; no cost, target GM or step cost). The two pages cross-link.
+
 ### Access control — two layers, and what each actually does
 
 1. **Site password gate (real, server-side).** The entire app is behind a single

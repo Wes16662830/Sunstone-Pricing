@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sunstone — Price List</title>
+  <style>
+    :root {
+      --bg:#f4f6f8; --panel:#ffffff; --line:#e2e7ec; --text:#1a2029; --dim:#5a6673;
+      --accent:#f5a623; --accent-ink:#1a1408; --soft:#eef1f5; --good:#1c7a3f;
+      --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+      --mono:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px; line-height:1.45; }
+    .topbar { display:flex; align-items:center; gap:16px; padding:14px 22px; background:var(--panel);
+      border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
+    .brand { display:flex; align-items:center; gap:10px; flex:1; }
+    .logo { font-size:26px; color:var(--accent); }
+    .brand-title { font-weight:700; font-size:15px; }
+    .brand-sub { font-size:11px; color:var(--dim); }
+    .topbar select, .btn { font:inherit; font-size:13px; padding:7px 11px; border:1px solid var(--line);
+      border-radius:6px; background:#fff; color:var(--text); cursor:pointer; text-decoration:none; }
+    .btn:hover { border-color:var(--accent); }
+    .btn-primary { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:600; }
+    .btn-primary:hover { background:#ffb733; }
+    main { max-width:900px; margin:22px auto; padding:0 18px 70px; }
+    h1 { font-size:22px; margin:0 0 4px; }
+    .lede { color:var(--dim); font-size:13px; margin:0 0 18px; max-width:640px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px 20px;
+      margin-bottom:18px; box-shadow:0 2px 10px rgba(20,30,50,.04); }
+    h2 { font-size:12px; text-transform:uppercase; letter-spacing:.7px; color:var(--dim); margin:0 0 12px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { padding:8px 8px; border-bottom:1px solid var(--soft); text-align:left; }
+    th { font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:var(--dim); font-weight:600; }
+    td.num, th.num { text-align:right; font-family:var(--mono); }
+    tr:last-child td { border-bottom:none; }
+    .tag { display:inline-block; font-size:10px; padding:1px 6px; border-radius:20px; margin-left:6px;
+      background:#eef4ff; color:#2a5aa8; border:1px solid #cfe0f7; }
+    .tag.no { background:#f5f0ea; color:#8a6a3a; border-color:#e6d8c2; }
+    .foot { font-size:12px; color:var(--dim); margin-top:8px; }
+    .card .cap { font-size:12px; color:var(--dim); margin:0 0 10px; }
+    @media print {
+      .no-print { display:none !important; }
+      body { background:#fff; } main { margin:0; max-width:none; }
+      .card { border:none; box-shadow:none; padding:0 0 10px; margin:0 0 10px; break-inside:avoid; }
+      .topbar { position:static; border:none; padding:0 0 10px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◧</span>
+      <div>
+        <div class="brand-title">Sunstone Price List</div>
+        <div class="brand-sub">Sunstone Logistic Systems</div>
+      </div>
+    </div>
+    <label class="no-print" title="Display currency"><select id="currency"></select></label>
+    <a class="btn no-print" href="/quote">Build a quote →</a>
+    <button class="btn btn-primary no-print" id="btn-print">🖨 Print / Save PDF</button>
+    <button class="btn no-print" id="signout">Sign out</button>
+  </header>
+
+  <main>
+    <h1>Price List</h1>
+    <p class="lede">Standard list pricing and published discount levels. All amounts exclude VAT. Subscription is billed monthly; hardware and installation are once-off. <span id="cur-note"></span></p>
+
+    <div class="card">
+      <h2>Software Subscription — Monthly</h2>
+      <table>
+        <thead><tr><th>Product</th><th>Billing</th><th class="num">Price / month</th><th>Discounts</th></tr></thead>
+        <tbody id="tbl-products"></tbody>
+      </table>
+      <p class="foot">Prices are per the billing basis shown (per vehicle, per user, or a flat monthly fee).</p>
+    </div>
+
+    <div class="card">
+      <h2>Multi-Product Bundle Discount</h2>
+      <p class="cap">Applied automatically to eligible products, based on how many eligible products are taken together.</p>
+      <table>
+        <thead><tr><th>Eligible products selected</th><th class="num">Discount off list</th></tr></thead>
+        <tbody id="tbl-bundle"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Fleet Volume Discount</h2>
+      <p class="cap">Applied automatically to eligible products, based on fleet size.</p>
+      <table>
+        <thead><tr><th>Fleet size</th><th>Tier</th><th class="num">Discount off list</th></tr></thead>
+        <tbody id="tbl-volume"></tbody>
+      </table>
+      <p class="foot">Bundle and volume discounts stack (multiplicatively) on products eligible for each.</p>
+    </div>
+
+    <div class="card" id="card-hardware">
+      <h2>Hardware — Once-Off</h2>
+      <table>
+        <thead><tr><th>Item</th><th class="num">Unit price</th></tr></thead>
+        <tbody id="tbl-hardware"></tbody>
+      </table>
+    </div>
+
+    <div class="card" id="card-install">
+      <h2>Installation — Once-Off</h2>
+      <table>
+        <thead><tr><th>Service</th><th class="num">Rate (per unit)</th></tr></thead>
+        <tbody id="tbl-install"></tbody>
+      </table>
+    </div>
+
+    <p class="foot">Pricing is indicative and valid for 30 days from the date printed. For a tailored quote, use “Build a quote”. Contact your Sunstone representative for volume agreements.</p>
+  </main>
+
+  <script src="/prices.js"></script>
+</body>
+</html>
