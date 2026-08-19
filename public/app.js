@@ -152,8 +152,10 @@ function renderSubscription() {
 function fillHandsetSelect(sel, current) {
   sel.innerHTML = '';
   P.HANDSET_OPTIONS.forEach((key) => {
+    const entry = P.HARDWARE_CATALOG[key];
+    if (!entry) return; // skip a handsetOptions key with no catalog entry (deleted item)
     const o = document.createElement('option');
-    o.value = key; o.textContent = P.HARDWARE_CATALOG[key].sku;
+    o.value = key; o.textContent = entry.sku;
     if (key === current) o.selected = true;
     sel.appendChild(o);
   });

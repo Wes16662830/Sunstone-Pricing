@@ -110,6 +110,24 @@
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const num = (v, d) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? d : Number(v));
 
+  // Merge a saved hardware catalog over the defaults, coercing every entry to a
+  // safe { sku, cost, note } object. A null / malformed saved entry (which could
+  // otherwise crash the whole app at cat[k].sku) is dropped, keeping the default
+  // for that key when one exists. This self-heals a corrupted saved config.
+  function mergeCatalog(defaults, saved) {
+    const out = clone(defaults);
+    Object.keys(saved || {}).forEach((k) => {
+      const v = saved[k];
+      if (v == null || typeof v !== 'object') return; // ignore garbage; keep default if any
+      out[k] = {
+        sku: v.sku != null ? String(v.sku) : (out[k] && out[k].sku) || k,
+        cost: num(v.cost, out[k] ? out[k].cost : 0),
+        note: v.note || '',
+      };
+    });
+    return out;
+  }
+
   function slug(s) {
     const base = String(s || '').trim().replace(/[^a-zA-Z0-9]+/g, ' ').trim().split(' ')
       .map((w, i) => (i === 0 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())).join('');
@@ -160,7 +178,7 @@
         .map((t) => ({ min: num(t.min, 1), max: num(t.max, 999999), name: t.name || 'Tier', discount: num(t.discount, 0) })),
       hardwareMarkup: num(cfg.hardwareMarkup, d.hardwareMarkup),
       // Keep the wired keys present (calc references them), overlaying user edits.
-      hardwareCatalog: Object.assign(clone(d.hardwareCatalog), cfg.hardwareCatalog || {}),
+      hardwareCatalog: mergeCatalog(d.hardwareCatalog, cfg.hardwareCatalog),
       handsetOptions: (Array.isArray(cfg.handsetOptions) && cfg.handsetOptions.length) ? cfg.handsetOptions : clone(d.handsetOptions),
       installRates: Object.assign({}, d.installRates, cfg.installRates || {}),
       installItems: Array.isArray(cfg.installItems) ? cfg.installItems.map((x, i) => ({
