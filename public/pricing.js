@@ -294,14 +294,23 @@
     const fuelKitDualSell = gpsSell + 2 * probeSell;
     const ir = activeConfig.installRates;
 
+    // Quantities on the wired rows default to fleet composition, but every one can
+    // be overridden per-row (items.qtyOverride[id]) so a hardware-only quote can be
+    // built without touching Subscription/fleet inputs. An empty/undefined override
+    // falls back to the fleet-derived quantity.
+    const qOverride = it.qtyOverride || {};
+    const bq = (id, def) => {
+      const v = qOverride[id];
+      return (v === undefined || v === null || v === '') ? def : (Number(v) || 0);
+    };
     const baseRows = [
-      { id: 'djHandset',  desc: `Digital Journey Handset (${item(djSku).sku})`, include: !!it.djHandsetInclude, qty: vehicles,        unit: sellPrice(item(djSku)) },
-      { id: 'smHandset',  desc: `Stock Master Handset (${item(smSku).sku})`,    include: !!it.smHandsetInclude, qty: vehicles,        unit: sellPrice(item(smSku)) },
-      { id: 'printer',    desc: item('urovoK419').sku,                          include: !!it.printerInclude,   qty: vehicles,        unit: printerSell },
-      { id: 'vehicleGps', desc: `Vehicle GPS Tracker (${item('teltonikaFMB125').sku})`, include: !!it.vehicleGpsInclude, qty: trackingOnlyQty, unit: gpsSell },
-      { id: 'trailerGps', desc: `Trailer GPS Tracker (${item('queclinkGV620MG').sku})`, include: !!it.trailerGpsInclude, qty: trailerQty,      unit: trailerSell },
-      { id: 'fuelKitSingle', desc: 'Fuel Probe Kit — Single-Tank (GPS + 1 probe)', include: !!it.fuelKitSingleInclude, qty: single, unit: fuelKitSingleSell },
-      { id: 'fuelKitDual',   desc: 'Fuel Probe Kit — Dual-Tank (GPS + 2 probes)',  include: !!it.fuelKitDualInclude,   qty: dual,   unit: fuelKitDualSell },
+      { id: 'djHandset',  desc: `Digital Journey Handset (${item(djSku).sku})`, include: !!it.djHandsetInclude, qty: bq('djHandset', vehicles),        unit: sellPrice(item(djSku)) },
+      { id: 'smHandset',  desc: `Stock Master Handset (${item(smSku).sku})`,    include: !!it.smHandsetInclude, qty: bq('smHandset', vehicles),        unit: sellPrice(item(smSku)) },
+      { id: 'printer',    desc: item('urovoK419').sku,                          include: !!it.printerInclude,   qty: bq('printer', vehicles),          unit: printerSell },
+      { id: 'vehicleGps', desc: `Vehicle GPS Tracker (${item('teltonikaFMB125').sku})`, include: !!it.vehicleGpsInclude, qty: bq('vehicleGps', trackingOnlyQty), unit: gpsSell },
+      { id: 'trailerGps', desc: `Trailer GPS Tracker (${item('queclinkGV620MG').sku})`, include: !!it.trailerGpsInclude, qty: bq('trailerGps', trailerQty),      unit: trailerSell },
+      { id: 'fuelKitSingle', desc: 'Fuel Probe Kit — Single-Tank (GPS + 1 probe)', include: !!it.fuelKitSingleInclude, qty: bq('fuelKitSingle', single), unit: fuelKitSingleSell },
+      { id: 'fuelKitDual',   desc: 'Fuel Probe Kit — Dual-Tank (GPS + 2 probes)',  include: !!it.fuelKitDualInclude,   qty: bq('fuelKitDual', dual),   unit: fuelKitDualSell },
     ];
 
     // Every OTHER catalogued item (Streamax + anything added in Config) shows as
@@ -333,11 +342,19 @@
     const shippingSurcharge = input.outsideSA ? hardwareSubtotal * activeConfig.intlShippingSurcharge : 0;
     const hardwareTotal = hardwareSubtotal + shippingSurcharge;
 
+    // Wired install rows default to the matching hardware quantity, but each can
+    // also be overridden (items.installQtyOverride[id]) for a manual / hardware-only
+    // quote. Empty/undefined override -> the derived quantity.
+    const iOverride = it.installQtyOverride || {};
+    const biq = (id, def) => {
+      const v = iOverride[id];
+      return (v === undefined || v === null || v === '') ? def : (Number(v) || 0);
+    };
     const baseInstall = [
-      { id: 'gpsInstall',        desc: 'GPS Tracking installation',                 qty: it.vehicleGpsInclude ? trackingOnlyQty : 0, rate: ir.gpsAlone },
-      { id: 'fuelKitSingleInst', desc: 'Fuel Probe Kit installation — single-tank', qty: it.fuelKitSingleInclude ? single : 0,       rate: ir.fuelKitSingle },
-      { id: 'fuelKitDualInst',   desc: 'Fuel Probe Kit installation — dual-tank',   qty: it.fuelKitDualInclude ? dual : 0,           rate: ir.fuelKitDual },
-      { id: 'trailerInstall',    desc: 'Trailer GPS installation',                  qty: it.trailerGpsInclude ? trailerQty : 0,      rate: ir.trailerGps },
+      { id: 'gpsInstall',        desc: 'GPS Tracking installation',                 qty: biq('gpsInstall', it.vehicleGpsInclude ? trackingOnlyQty : 0), rate: ir.gpsAlone },
+      { id: 'fuelKitSingleInst', desc: 'Fuel Probe Kit installation — single-tank', qty: biq('fuelKitSingleInst', it.fuelKitSingleInclude ? single : 0),  rate: ir.fuelKitSingle },
+      { id: 'fuelKitDualInst',   desc: 'Fuel Probe Kit installation — dual-tank',   qty: biq('fuelKitDualInst', it.fuelKitDualInclude ? dual : 0),        rate: ir.fuelKitDual },
+      { id: 'trailerInstall',    desc: 'Trailer GPS installation',                  qty: biq('trailerInstall', it.trailerGpsInclude ? trailerQty : 0),    rate: ir.trailerGps },
     ];
 
     // Every configured installation item shows as a directly selectable row.
