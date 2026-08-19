@@ -2,4 +2,5 @@
 # These are the LOCAL development values only — set real secrets in Cloudflare
 # with `wrangler pages secret put PASSWORD` / `... SESSION_SECRET`.
 PASSWORD=sunstone
+CLIENT_PASSWORD=client
 SESSION_SECRET=dev-insecure-secret-change-me

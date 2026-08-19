@@ -4,7 +4,8 @@
  * Uses Web Crypto (available in the Workers runtime) — mirrors the HMAC scheme
  * in the local Node server.js so both backends issue interchangeable sessions.
  */
-export const COOKIE = 'sps_session';
+export const COOKIE = 'sps_session';         // internal staff session
+export const CLIENT_COOKIE = 'sps_client';   // external client (quote page) session
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12h
 
 const enc = new TextEncoder();
@@ -42,9 +43,55 @@ export function getCookie(request, name) {
 }
 
 export function sessionCookie(request, token) {
+  return cookieFor(COOKIE, request, token);
+}
+
+// Client (external) session cookie — same signing scheme, different name so a
+// client token can never satisfy the internal-only gate (and vice-versa).
+export function clientCookie(request, token) {
+  return cookieFor(CLIENT_COOKIE, request, token);
+}
+
+function cookieFor(name, request, token) {
   const secure = new URL(request.url).protocol === 'https:' ? ' Secure;' : '';
   const maxAge = token ? SESSION_TTL_MS / 1000 : 0;
-  return `${COOKIE}=${token || ''}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge};${secure}`;
+  return `${name}=${token || ''}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge};${secure}`;
+}
+
+// Load the saved global pricing config (single D1 row) into the shared engine,
+// falling back to workbook defaults. Call immediately before a synchronous
+// compute so the module-global active config is the one this request wants.
+export async function applyActiveConfig(env, Pricing) {
+  let cfg = Pricing.getDefaultConfig();
+  try {
+    const row = await env.DB.prepare('SELECT data_json FROM config WHERE id = 1').first();
+    if (row && row.data_json) cfg = JSON.parse(row.data_json);
+  } catch (e) { /* no DB / no row -> defaults */ }
+  return Pricing.setConfig(cfg);
+}
+
+// Whitelisted, margin-safe projection of a subscription result for the client
+// quote page. Contains ONLY prices the client would pay — never marginal cost,
+// target GM, or step cost. Shared by both backends' /api/client/quote.
+export function clientQuoteProjection(sub, vehicles, users) {
+  const items = sub.lines.filter((l) => l.selected).map((l) => ({
+    product: l.quoteLabel, billing: l.billing, billingLabel: l.billingLabel,
+    qty: l.qty, unitPrice: l.effectivePrice, monthly: l.monthly, annual: l.annual,
+  }));
+  const notes = [];
+  if (sub.fuelTrackingConflict) {
+    notes.push('Fuel monitoring already includes Tracking — you may not need both selected.');
+  }
+  return {
+    vehicles, users, items,
+    monthly: sub.totalMonthly, annual: sub.totalAnnual,
+    perVehicle: sub.blendedPerVehicle,
+    discounts: {
+      bundle: sub.bundle.discount, volume: sub.volume.discount,
+      blended: sub.effectiveBlendedDiscount,
+    },
+    notes,
+  };
 }
 
 export function json(obj, status = 200, extraHeaders) {

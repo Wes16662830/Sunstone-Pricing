@@ -61,6 +61,30 @@ Two views toggled in one app:
 - **Internal view (the "Internal Margin" tab)** — full cost, margin, contribution,
   step-cost, discount walk-down, and margin-floor data.
 
+### Client quote page (`/quote`) — safe to send to a customer
+
+There is a separate, self-service **client pricing page** at `/quote` you can
+share with a customer. It is deliberately minimal: the client enters their fleet
+size, ticks the products they want, picks a currency, and sees indicative
+monthly / annual / per-vehicle subscription pricing (bundle and volume discounts
+applied automatically), plus a printable quote. Hardware and implementation are
+shown as "quoted separately".
+
+**Why it's safe to share (margin-safe by construction):** the client page ships
+**no pricing engine and no cost constants**. It calls two endpoints —
+`GET /api/client/catalog` (product names, billing basis, and the per-unit *list*
+price only) and `POST /api/client/quote` (runs the shared engine server-side and
+returns only client-facing prices via `clientQuoteProjection`). Marginal cost,
+target GM, and step cost are computed away on the server and never sent. The
+client session cookie (`sps_client`) unlocks **only** `/quote`, its assets, and
+`/api/client/*`; it cannot reach `/`, `pricing.js`, `/api/config`, or any internal
+route (verified: those return 302/401 for a client-only session).
+
+Access is a **separate password** from the internal one — set `CLIENT_PASSWORD`
+(Cloudflare Pages secret, or env var locally; default `client` for local dev).
+Share the `/quote` link and that access code with your customer; it never unlocks
+the internal margin/config tool.
+
 ### Access control — two layers, and what each actually does
 
 1. **Site password gate (real, server-side).** The entire app is behind a single
@@ -130,6 +154,7 @@ npx wrangler pages deploy public
 
 # 4. Set the secrets (you'll be prompted for the value)
 npx wrangler pages secret put PASSWORD         # the staff login password
+npx wrangler pages secret put CLIENT_PASSWORD  # separate password for the /quote client page
 npx wrangler pages secret put SESSION_SECRET   # any long random string
 
 # 5. In the Cloudflare dashboard → your Pages project → Settings → Functions →

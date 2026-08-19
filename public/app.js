@@ -1162,7 +1162,15 @@ function wireConfig() {
       if (add === 'product') editCfg.products.push({ key: 'p' + Math.random().toString(36).slice(2, 8), name: 'New Product', marginalCost: 0, targetGM: 0.75, stepThreshold: 300, billing: 'perVehicle', bundleEligible: true, volumeEligible: true });
       else if (add === 'volume') editCfg.volumeTiers.push({ min: 0, max: 999999, name: 'New Tier', discount: 0 });
       else if (add === 'bundle') { const next = Object.keys(editCfg.bundleSchedule).length + 1; editCfg.bundleSchedule[next] = 0; }
-      else if (add === 'hardware') { const k = P.slug('item ' + (Object.keys(editCfg.hardwareCatalog).length + 1)); editCfg.hardwareCatalog[k] = { sku: 'New Item', cost: 0, note: '' }; }
+      else if (add === 'hardware') {
+        // Generate a GUARANTEED-unique key. A count-based key (item<N>) collides
+        // after a delete-then-add and silently overwrites an existing item, which
+        // is why "added items" could disappear. Bump until the key is free.
+        let n = Object.keys(editCfg.hardwareCatalog).length + 1;
+        let k = P.slug('item ' + n);
+        while (editCfg.hardwareCatalog[k]) k = P.slug('item ' + (++n));
+        editCfg.hardwareCatalog[k] = { sku: 'New Item', cost: 0, note: '' };
+      }
       else if (add === 'installItem') editCfg.installItems.push({ key: 'ii' + Math.random().toString(36).slice(2, 8), name: 'New Installation', rate: 0 });
       else if (add === 'activity') editCfg.implActivities.push({ desc: 'New Activity', hours: 0, senior: true, discount: 0 });
       renderConfig();

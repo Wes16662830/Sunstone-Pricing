@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
+const P = require('./public/pricing.js'); // shared calc engine (client quote endpoints)
 
 const PORT = process.env.PORT || 4000;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -30,9 +31,13 @@ const PUBLIC = path.join(ROOT, 'public');
 const DB_PATH = process.env.DB_PATH || path.join(ROOT, 'quotes.db');
 
 const PASSWORD = process.env.PASSWORD || 'sunstone';
+// Separate password for the external client quote page (/quote). Distinct from
+// PASSWORD so a client link never unlocks the internal margin/config views.
+const CLIENT_PASSWORD = process.env.CLIENT_PASSWORD || 'client';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-insecure-secret-change-me';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12h
-const COOKIE = 'sps_session';
+const COOKIE = 'sps_session';        // internal staff session
+const CLIENT_COOKIE = 'sps_client';  // external client session
 
 // --- DB setup -------------------------------------------------------------
 const db = new DatabaseSync(DB_PATH);
@@ -78,6 +83,31 @@ function parseCookies(req) {
   return out;
 }
 function isAuthed(req) { return verifyToken(parseCookies(req)[COOKIE]); }
+function isClientAuthed(req) { return verifyToken(parseCookies(req)[CLIENT_COOKIE]); }
+
+// Load the saved global config (or workbook defaults) into the shared engine
+// immediately before a synchronous compute for the client quote endpoints.
+function loadActiveConfig() {
+  const row = db.prepare('SELECT data_json FROM config WHERE id = 1').get();
+  P.setConfig(row ? JSON.parse(row.data_json) : P.getDefaultConfig());
+}
+// Margin-safe projection shared with the Cloudflare backend (functions/_shared.js).
+function clientQuoteProjection(sub, vehicles, users) {
+  const items = sub.lines.filter((l) => l.selected).map((l) => ({
+    product: l.quoteLabel, billing: l.billing, billingLabel: l.billingLabel,
+    qty: l.qty, unitPrice: l.effectivePrice, monthly: l.monthly, annual: l.annual,
+  }));
+  const notes = [];
+  if (sub.fuelTrackingConflict) {
+    notes.push('Fuel monitoring already includes Tracking — you may not need both selected.');
+  }
+  return {
+    vehicles, users, items,
+    monthly: sub.totalMonthly, annual: sub.totalAnnual, perVehicle: sub.blendedPerVehicle,
+    discounts: { bundle: sub.bundle.discount, volume: sub.volume.discount, blended: sub.effectiveBlendedDiscount },
+    notes,
+  };
+}
 
 // --- tiny helpers ---------------------------------------------------------
 const MIME = {
@@ -106,6 +136,8 @@ function serveStatic(req, res) {
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
   if (urlPath === '/') urlPath = '/index.html';
   if (urlPath === '/login') urlPath = '/login.html'; // match Cloudflare Pages clean URL
+  if (urlPath === '/quote') urlPath = '/quote.html';
+  if (urlPath === '/quote-login') urlPath = '/quote-login.html';
   const resolved = path.resolve(path.join(PUBLIC, urlPath));
   if (!resolved.startsWith(PUBLIC)) { res.writeHead(403); return res.end('Forbidden'); }
   fs.readFile(resolved, (err, buf) => {
@@ -143,7 +175,49 @@ async function handleApi(req, res) {
     return sendJSON(res, 200, { ok: true }, { 'Set-Cookie': `${COOKIE}=; HttpOnly; Path=/; Max-Age=0` });
   }
 
-  // Everything else requires auth
+  // --- Client quote area (external clients) --------------------------------
+  if (parts[1] === 'client') {
+    // Client auth endpoints (no session required)
+    if (parts[2] === 'login' && req.method === 'POST') {
+      const body = await readBody(req).catch(() => ({}));
+      if (body.password && String(body.password).trim() === String(CLIENT_PASSWORD).trim()) {
+        const cookie = `${CLIENT_COOKIE}=${makeToken()}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
+        return sendJSON(res, 200, { ok: true }, { 'Set-Cookie': cookie });
+      }
+      return sendJSON(res, 401, { error: 'invalid password' });
+    }
+    if (parts[2] === 'logout' && req.method === 'POST') {
+      return sendJSON(res, 200, { ok: true }, { 'Set-Cookie': `${CLIENT_COOKIE}=; HttpOnly; Path=/; Max-Age=0` });
+    }
+    // Client data endpoints — client cookie, or a valid internal session.
+    if (!isClientAuthed(req) && !isAuthed(req)) return sendJSON(res, 401, { error: 'unauthenticated' });
+    try {
+      if (parts[2] === 'catalog' && req.method === 'GET') {
+        loadActiveConfig();
+        const active = P.getConfig();
+        const products = active.products.map((p) => ({
+          key: p.key, name: p.quoteLabel || p.name, billing: p.billing,
+          billingLabel: p.billing === 'perUser' ? 'per user' : p.billing === 'flat' ? 'flat / month' : 'per vehicle',
+          unitPrice: P.listPrice(p), bundleEligible: p.bundleEligible, volumeEligible: p.volumeEligible,
+        }));
+        return sendJSON(res, 200, { products, currency: { zarPerUnit: active.currency.zarPerUnit } });
+      }
+      if (parts[2] === 'quote' && req.method === 'POST') {
+        const body = await readBody(req);
+        const vehicles = Math.max(0, Number(body.vehicles) || 0);
+        const users = Math.max(0, Number(body.users) || 0);
+        const selected = (body.selected && typeof body.selected === 'object') ? body.selected : {};
+        loadActiveConfig();
+        const sub = P.calcSubscription({ vehicles, users, selected });
+        return sendJSON(res, 200, clientQuoteProjection(sub, vehicles, users));
+      }
+    } catch (e) {
+      return sendJSON(res, 400, { error: e.message });
+    }
+    return sendJSON(res, 404, { error: 'unknown endpoint' });
+  }
+
+  // Everything else requires internal auth
   if (!isAuthed(req)) return sendJSON(res, 401, { error: 'unauthenticated' });
 
   try {
@@ -208,13 +282,24 @@ async function handleApi(req, res) {
 }
 
 // --- router ---------------------------------------------------------------
-const PUBLIC_PATHS = new Set(['/login', '/login.html', '/favicon.ico']);
+const OPEN_PATHS = new Set(['/login', '/login.html', '/favicon.ico', '/quote-login', '/quote-login.html']);
+// Client area assets — reachable with the client cookie (or an internal session).
+const CLIENT_ASSETS = new Set(['/quote', '/quote.html', '/quote.js', '/styles.css']);
 const server = http.createServer((req, res) => {
   if (req.url.startsWith('/api/')) return handleApi(req, res);
 
   const urlPath = decodeURIComponent(req.url.split('?')[0]);
-  // Gate every static route behind auth; allow only the login page itself.
-  if (!PUBLIC_PATHS.has(urlPath) && !isAuthed(req)) {
+  if (OPEN_PATHS.has(urlPath)) return serveStatic(req, res);
+
+  // Client quote area: client cookie or internal session; else client login.
+  if (CLIENT_ASSETS.has(urlPath)) {
+    if (isClientAuthed(req) || isAuthed(req)) return serveStatic(req, res);
+    res.writeHead(302, { Location: '/quote-login?next=' + encodeURIComponent(urlPath) });
+    return res.end();
+  }
+
+  // Internal app: staff session only.
+  if (!isAuthed(req)) {
     res.writeHead(302, { Location: '/login?next=' + encodeURIComponent(urlPath) });
     return res.end();
   }
@@ -224,6 +309,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`\n  Sunstone Pricing Calculator`);
   console.log(`  → http://${HOST}:${PORT}`);
-  console.log(`  Login password: ${process.env.PASSWORD ? '(from $PASSWORD)' : '"sunstone" (default — set $PASSWORD to change)'}`);
+  console.log(`  Internal login: ${process.env.PASSWORD ? '(from $PASSWORD)' : '"sunstone" (default — set $PASSWORD to change)'}`);
+  console.log(`  Client quote page: http://${HOST}:${PORT}/quote  ·  password: ${process.env.CLIENT_PASSWORD ? '(from $CLIENT_PASSWORD)' : '"client" (default — set $CLIENT_PASSWORD to change)'}`);
   console.log(`  Quotes persist to: ${DB_PATH}  (single-machine SQLite)\n`);
 });
