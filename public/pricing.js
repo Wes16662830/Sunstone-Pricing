@@ -305,10 +305,14 @@
     ];
 
     // Every OTHER catalogued item (Streamax + anything added in Config) shows as
-    // a directly selectable row, so nothing is hidden. The "wired" keys above are
-    // excluded (handsets are chosen via the handset dropdowns; GPS/printer/probe
-    // are their own rows). Per-item include + qty come from items.extra[key].
-    const wiredKeys = new Set([...opts, 'urovoK419', 'teltonikaFMB125', 'queclinkGV620MG', 'omnicommLS4']);
+    // a directly selectable row, so nothing is hidden. We exclude ONLY the catalog
+    // items that already have a dedicated row above: the two handset SKUs currently
+    // selected in the dropdowns, and the printer / GPS / trailer / probe used by the
+    // fleet-composition rows. We deliberately do NOT exclude the whole
+    // handsetOptions list — if that list ever contains a non-handset key, excluding
+    // all of it would wrongly hide added items (they'd vanish from this table).
+    // Per-item include + qty come from items.extra[key].
+    const wiredKeys = new Set([djSku, smSku, 'urovoK419', 'teltonikaFMB125', 'queclinkGV620MG', 'omnicommLS4']);
     const extra = it.extra || {};
     Object.keys(cat).forEach((k) => {
       if (wiredKeys.has(k)) return;
