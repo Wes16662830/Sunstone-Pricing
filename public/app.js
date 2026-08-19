@@ -55,6 +55,8 @@ function defaultDeal() {
         fuelKitSingleInclude: false, fuelKitDualInclude: false,
         extra: {},         // catalog items shown as rows: { [key]: { include, qty } }
         installSel: {},    // installation items shown as rows: { [key]: { include, qty } }
+        qtyOverride: {},        // per-row manual qty for wired hardware rows: { [id]: qty }
+        installQtyOverride: {}, // per-row manual qty for wired install rows: { [id]: qty }
         custom: [],        // legacy one-off catalogued items (older quotes)
         customInstall: [], // one-off installation lines: [{ desc, qty, rate }]
       },
@@ -197,7 +199,7 @@ function renderHardware() {
       tr.innerHTML = `
         <td><input type="checkbox" data-inc="${includeKey[r.id]}" ${r.include ? 'checked' : ''}></td>
         <td>${r.desc}</td>
-        <td class="num">${r.qty}</td>
+        <td class="num"><input class="cell-input num" type="number" min="0" data-base-qty="${r.id}" value="${r.qty}"></td>
         <td class="num">${cur(r.unit)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
     }
@@ -206,6 +208,15 @@ function renderHardware() {
   const ensureExtra = (k) => (deal.hardware.items.extra[k] = deal.hardware.items.extra[k] || { include: false, qty: deal.vehicles || 0 });
   tb.querySelectorAll('input[data-inc]').forEach((cb) => {
     cb.addEventListener('change', (e) => { deal.hardware.items[e.target.dataset.inc] = e.target.checked; recompute(); });
+  });
+  // Editable qty on the wired rows: empty clears the override (reverts to fleet qty).
+  tb.querySelectorAll('[data-base-qty]').forEach((el) => {
+    el.addEventListener('change', (e) => {
+      const id = e.target.dataset.baseQty; const v = e.target.value;
+      const ov = (deal.hardware.items.qtyOverride = deal.hardware.items.qtyOverride || {});
+      if (v === '') delete ov[id]; else ov[id] = Math.max(0, Number(v) || 0);
+      recompute();
+    });
   });
   tb.querySelectorAll('[data-extra-key]').forEach((cb) => {
     cb.addEventListener('change', (e) => { const k = e.target.dataset.extraKey; ensureExtra(k).include = e.target.checked; recompute(); });
@@ -250,11 +261,24 @@ function renderHardware() {
         <td class="num">${cur(r.subtotal)}</td>`;
     } else {
       if (r.subtotal === 0) tr.className = 'row-off';
-      tr.innerHTML = `<td>${r.desc}</td><td class="num">${r.qty}</td><td class="num">${cur(r.rate)}</td><td class="num">${cur(r.subtotal)}</td>`;
+      tr.innerHTML = `
+        <td>${r.desc}</td>
+        <td class="num"><input class="cell-input num" type="number" min="0" data-baseinst-qty="${r.id}" value="${r.qty}"></td>
+        <td class="num">${cur(r.rate)}</td>
+        <td class="num">${cur(r.subtotal)}</td>`;
     }
     itb.appendChild(tr);
   });
   const ensureInst = (k) => (deal.hardware.items.installSel[k] = deal.hardware.items.installSel[k] || { include: false, qty: deal.vehicles || 0 });
+  // Editable qty on the wired install rows: empty clears the override.
+  itb.querySelectorAll('[data-baseinst-qty]').forEach((el) => {
+    el.addEventListener('change', (e) => {
+      const id = e.target.dataset.baseinstQty; const v = e.target.value;
+      const ov = (deal.hardware.items.installQtyOverride = deal.hardware.items.installQtyOverride || {});
+      if (v === '') delete ov[id]; else ov[id] = Math.max(0, Number(v) || 0);
+      recompute();
+    });
+  });
   itb.querySelectorAll('[data-instsel-key]').forEach((cb) => cb.addEventListener('change', (e) => { ensureInst(e.target.dataset.instselKey).include = e.target.checked; recompute(); }));
   itb.querySelectorAll('[data-instsel-qty]').forEach((el) => el.addEventListener('change', (e) => { ensureInst(e.target.dataset.instselQty).qty = Math.max(0, Number(e.target.value) || 0); recompute(); }));
   itb.querySelectorAll('[data-cinst-desc]').forEach((el) => el.addEventListener('change', (e) => { deal.hardware.items.customInstall[+e.target.dataset.cinstDesc].desc = e.target.value; recompute(); }));
