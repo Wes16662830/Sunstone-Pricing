@@ -94,6 +94,43 @@ export function clientQuoteProjection(sub, vehicles, users) {
   };
 }
 
+function billingLabel(b) {
+  return b === 'perUser' ? 'per user' : b === 'flat' ? 'flat / month' : 'per vehicle';
+}
+
+// Margin-safe price-list projection: list (sell) prices + published discount
+// levels only. No cost, target GM or step cost. Shared by both backends'
+// /api/client/pricelist. `active` is the merged config; Pricing supplies the
+// list/sell price helpers (config already applied).
+export function clientPriceList(active, Pricing) {
+  const products = active.products.map((p) => ({
+    name: p.quoteLabel || p.name,
+    billing: p.billing,
+    billingLabel: billingLabel(p.billing),
+    unitPrice: Pricing.listPrice(p),
+    bundleEligible: p.bundleEligible,
+    volumeEligible: p.volumeEligible,
+  }));
+  const bundle = Object.keys(active.bundleSchedule || {})
+    .map(Number).filter((n) => !Number.isNaN(n)).sort((a, b) => a - b)
+    .map((count) => ({ count, discount: active.bundleSchedule[count] }));
+  const volume = (active.volumeTiers || []).map((t) => ({
+    min: t.min, max: t.max, name: t.name, discount: t.discount,
+  }));
+  const hardware = Object.keys(active.hardwareCatalog || {}).map((k) => ({
+    name: active.hardwareCatalog[k].sku, price: Pricing.sellPrice(active.hardwareCatalog[k]),
+  }));
+  const r = active.installRates || {};
+  const install = [
+    { name: 'GPS tracking installation', rate: r.gpsAlone },
+    { name: 'Fuel probe kit installation — single-tank', rate: r.fuelKitSingle },
+    { name: 'Fuel probe kit installation — dual-tank', rate: r.fuelKitDual },
+    { name: 'Trailer GPS installation', rate: r.trailerGps },
+    ...(active.installItems || []).map((ii) => ({ name: ii.name, rate: ii.rate })),
+  ];
+  return { products, bundle, volume, hardware, install, currency: { zarPerUnit: active.currency.zarPerUnit } };
+}
+
 export function json(obj, status = 200, extraHeaders) {
   return new Response(JSON.stringify(obj), {
     status,

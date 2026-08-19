@@ -91,6 +91,31 @@ function loadActiveConfig() {
   const row = db.prepare('SELECT data_json FROM config WHERE id = 1').get();
   P.setConfig(row ? JSON.parse(row.data_json) : P.getDefaultConfig());
 }
+// Margin-safe price-list projection (mirrors functions/_shared.js clientPriceList).
+function clientPriceList(active) {
+  const billingLabel = (b) => b === 'perUser' ? 'per user' : b === 'flat' ? 'flat / month' : 'per vehicle';
+  const products = active.products.map((p) => ({
+    name: p.quoteLabel || p.name, billing: p.billing, billingLabel: billingLabel(p.billing),
+    unitPrice: P.listPrice(p), bundleEligible: p.bundleEligible, volumeEligible: p.volumeEligible,
+  }));
+  const bundle = Object.keys(active.bundleSchedule || {})
+    .map(Number).filter((n) => !Number.isNaN(n)).sort((a, b) => a - b)
+    .map((count) => ({ count, discount: active.bundleSchedule[count] }));
+  const volume = (active.volumeTiers || []).map((t) => ({ min: t.min, max: t.max, name: t.name, discount: t.discount }));
+  const hardware = Object.keys(active.hardwareCatalog || {}).map((k) => ({
+    name: active.hardwareCatalog[k].sku, price: P.sellPrice(active.hardwareCatalog[k]),
+  }));
+  const r = active.installRates || {};
+  const install = [
+    { name: 'GPS tracking installation', rate: r.gpsAlone },
+    { name: 'Fuel probe kit installation — single-tank', rate: r.fuelKitSingle },
+    { name: 'Fuel probe kit installation — dual-tank', rate: r.fuelKitDual },
+    { name: 'Trailer GPS installation', rate: r.trailerGps },
+    ...(active.installItems || []).map((ii) => ({ name: ii.name, rate: ii.rate })),
+  ];
+  return { products, bundle, volume, hardware, install, currency: { zarPerUnit: active.currency.zarPerUnit } };
+}
+
 // Margin-safe projection shared with the Cloudflare backend (functions/_shared.js).
 function clientQuoteProjection(sub, vehicles, users) {
   const items = sub.lines.filter((l) => l.selected).map((l) => ({
@@ -137,6 +162,7 @@ function serveStatic(req, res) {
   if (urlPath === '/') urlPath = '/index.html';
   if (urlPath === '/login') urlPath = '/login.html'; // match Cloudflare Pages clean URL
   if (urlPath === '/quote') urlPath = '/quote.html';
+  if (urlPath === '/prices') urlPath = '/prices.html';
   if (urlPath === '/quote-login') urlPath = '/quote-login.html';
   const resolved = path.resolve(path.join(PUBLIC, urlPath));
   if (!resolved.startsWith(PUBLIC)) { res.writeHead(403); return res.end('Forbidden'); }
@@ -211,6 +237,10 @@ async function handleApi(req, res) {
         const sub = P.calcSubscription({ vehicles, users, selected });
         return sendJSON(res, 200, clientQuoteProjection(sub, vehicles, users));
       }
+      if (parts[2] === 'pricelist' && req.method === 'GET') {
+        loadActiveConfig();
+        return sendJSON(res, 200, clientPriceList(P.getConfig()));
+      }
     } catch (e) {
       return sendJSON(res, 400, { error: e.message });
     }
@@ -284,7 +314,7 @@ async function handleApi(req, res) {
 // --- router ---------------------------------------------------------------
 const OPEN_PATHS = new Set(['/login', '/login.html', '/favicon.ico', '/quote-login', '/quote-login.html']);
 // Client area assets — reachable with the client cookie (or an internal session).
-const CLIENT_ASSETS = new Set(['/quote', '/quote.html', '/quote.js', '/styles.css']);
+const CLIENT_ASSETS = new Set(['/quote', '/quote.html', '/quote.js', '/prices', '/prices.html', '/prices.js', '/styles.css']);
 const server = http.createServer((req, res) => {
   if (req.url.startsWith('/api/')) return handleApi(req, res);
 

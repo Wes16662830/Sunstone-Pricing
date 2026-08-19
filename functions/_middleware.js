@@ -19,7 +19,7 @@ const OPEN_PATHS = new Set([
 ]);
 // Client area static assets (client cookie — or internal — required). These
 // carry no cost/margin data. Everything else falls through to the internal gate.
-const CLIENT_ASSETS = new Set(['/quote', '/quote.html', '/quote.js', '/styles.css']);
+const CLIENT_ASSETS = new Set(['/quote', '/quote.html', '/quote.js', '/prices', '/prices.html', '/prices.js', '/styles.css']);
 
 function unauth() {
   return new Response(JSON.stringify({ error: 'unauthenticated' }), {
