@@ -55,8 +55,19 @@ db.exec(`
     data_json   TEXT NOT NULL,
     updated_at  TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS client_links (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    token       TEXT NOT NULL UNIQUE,
+    label       TEXT,
+    created_at  TEXT NOT NULL,
+    revoked     INTEGER NOT NULL DEFAULT 0
+  );
 `);
 const nowISO = () => new Date().toISOString();
+// URL-safe token for a client access link — long and random enough that it's
+// the credential itself (no separate password). 48 hex chars = 192 bits.
+const newLinkToken = () => crypto.randomBytes(24).toString('hex');
+const rowToClientLink = (r) => ({ id: r.id, token: r.token, label: r.label, createdAt: r.created_at, revoked: !!r.revoked });
 
 // --- Auth helpers ---------------------------------------------------------
 function sign(expiry) {
@@ -270,6 +281,26 @@ async function handleApi(req, res) {
       }
     }
 
+    if (parts[1] === 'client-links') {
+      const id = parts[2];
+      if (req.method === 'GET' && !id) {
+        return sendJSON(res, 200, db.prepare('SELECT * FROM client_links ORDER BY created_at DESC').all().map(rowToClientLink));
+      }
+      if (req.method === 'POST' && !id) {
+        const body = await readBody(req).catch(() => ({}));
+        const label = (body.label || '').toString().slice(0, 200);
+        const token = newLinkToken();
+        const ts = nowISO();
+        const info = db.prepare('INSERT INTO client_links (token, label, created_at, revoked) VALUES (?,?,?,0)')
+          .run(token, label, ts);
+        return sendJSON(res, 201, rowToClientLink(db.prepare('SELECT * FROM client_links WHERE id = ?').get(info.lastInsertRowid)));
+      }
+      if (req.method === 'DELETE' && id) {
+        db.prepare('UPDATE client_links SET revoked = 1 WHERE id = ?').run(Number(id));
+        return sendJSON(res, 200, { ok: true });
+      }
+    }
+
     if (parts[1] === 'quotes') {
       const id = parts[2];
       if (req.method === 'GET' && !id) {
@@ -319,6 +350,25 @@ const server = http.createServer((req, res) => {
   if (req.url.startsWith('/api/')) return handleApi(req, res);
 
   const urlPath = decodeURIComponent(req.url.split('?')[0]);
+
+  // Client access link — a per-client magic link generated in Config → Client
+  // Links. The token itself IS the credential, so this route needs no session.
+  // A valid, unrevoked token issues a normal client session (same cookie the
+  // password login would) and sends the browser straight into the quote tool.
+  if (urlPath === '/client-access') {
+    const token = new URL(req.url, `http://${req.headers.host}`).searchParams.get('token') || '';
+    const row = token && db.prepare('SELECT * FROM client_links WHERE token = ? AND revoked = 0').get(token);
+    const secureFlag = (req.headers['x-forwarded-proto'] === 'https') ? ' Secure;' : '';
+    if (row) {
+      const cookie = `${CLIENT_COOKIE}=${makeToken()}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
+      res.writeHead(302, { Location: '/quote', 'Set-Cookie': cookie });
+      return res.end();
+    }
+    // Unknown / revoked token — fall back to the manual client login.
+    res.writeHead(302, { Location: '/quote-login' });
+    return res.end();
+  }
+
   if (OPEN_PATHS.has(urlPath)) return serveStatic(req, res);
 
   // Client quote area: client cookie or internal session; else client login.

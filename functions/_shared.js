@@ -10,6 +10,18 @@ export const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12h
 
 const enc = new TextEncoder();
 
+// URL-safe token for a client access link — long and random enough that it's
+// the credential itself (no separate password). 48 hex chars = 192 bits.
+export function newLinkToken() {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+export function rowToClientLink(r) {
+  return { id: r.id, token: r.token, label: r.label, createdAt: r.created_at, revoked: !!r.revoked };
+}
+
 async function hmacHex(secret, msg) {
   const key = await crypto.subtle.importKey(
     'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);

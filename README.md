@@ -80,10 +80,19 @@ client session cookie (`sps_client`) unlocks **only** `/quote`, its assets, and
 `/api/client/*`; it cannot reach `/`, `pricing.js`, `/api/config`, or any internal
 route (verified: those return 302/401 for a client-only session).
 
-Access is a **separate password** from the internal one — set `CLIENT_PASSWORD`
-(Cloudflare Pages secret, or env var locally; default `client` for local dev).
-Share the `/quote` link and that access code with your customer; it never unlocks
-the internal margin/config tool.
+There are two ways a client gets in:
+
+1. **A shared password** — set `CLIENT_PASSWORD` (Cloudflare Pages secret, or env
+   var locally; default `client` for local dev). Share the `/quote` link and that
+   access code with your customer; it never unlocks the internal margin/config tool.
+2. **Per-client single sign-on links** (recommended) — internal staff generate a
+   link from **Config → Client Access Links**. The link
+   (`/client-access?token=…`) carries a long random token that IS the credential:
+   opening it signs the browser straight into `/quote` (and `/prices`), no
+   password needed. Each link is independently **revocable** — revoking one
+   client's link cuts off only that client, without touching the shared password
+   or anyone else's link. Links are stored in their own table (`client_links`),
+   separate from the pricing config.
 
 There is also a read-only **price-list page at `/prices`** (same client password):
 a single reference sheet of all standard list pricing and published discount

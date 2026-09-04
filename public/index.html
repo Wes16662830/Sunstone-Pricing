@@ -230,6 +230,20 @@
 
     <!-- CONFIG (global pricing configuration; internal, hidden in Presentation mode) -->
     <section class="panel" data-panel="config">
+      <div class="card">
+        <h2>Client Access Links</h2>
+        <p class="note" style="margin:0 0 10px">Create a single sign-on link for an external client — opening it signs them straight into the Quote and Price List pages, no password needed. Revoke a link at any time to cut off that client's access without affecting anyone else.</p>
+        <div class="link-create-row">
+          <input id="link-label" class="cell-input" type="text" placeholder="Client / deal name (e.g. Acme Foods)" style="width:260px">
+          <button id="link-create" class="btn btn-primary">＋ Create link</button>
+        </div>
+        <table class="data" id="link-table">
+          <thead><tr><th>Label</th><th>Link</th><th>Created</th><th>Status</th><th></th></tr></thead>
+          <tbody id="link-tbody"></tbody>
+        </table>
+        <p class="note" id="link-empty" style="display:none">No client links yet — create one above.</p>
+      </div>
+
       <div class="banner banner-warn">Global pricing configuration — edits here apply to <strong>every quote, for everyone</strong> (shared, stored server-side). Click <strong>Save configuration</strong> to apply.</div>
       <div class="config-actions">
         <button id="cfg-save" class="btn btn-primary">💾 Save configuration</button>

@@ -200,6 +200,17 @@ input[type=checkbox] { width: 15px; height: 15px; accent-color: var(--accent); }
 .config-actions { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
 .btn.cfg-add { font-size: 11px; padding: 3px 8px; margin-left: 10px; font-weight: 400; }
 .btn.cfg-del { font-size: 11px; padding: 2px 7px; color: var(--bad); }
+.link-create-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+.link-tag { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 600; letter-spacing: .3px; }
+.link-tag.active { background: #1f3a2a; color: var(--good); border: 1px solid #2a5638; }
+.link-tag.revoked { background: #3a1f1f; color: var(--bad); border: 1px solid #6b2f2f; }
+:root[data-theme="light"] .link-tag.active { background: #e3f5ea; color: #1c7a3f; border-color: #b6e2c6; }
+:root[data-theme="light"] .link-tag.revoked { background: #fdecea; color: #8a2018; border-color: #f3b7b0; }
+.reorder-cell { white-space: nowrap; }
+.btn.cfg-move { font-size: 10px; padding: 2px 6px; line-height: 1.4; }
+.btn.cfg-move + .btn.cfg-move { margin-left: 3px; }
+.btn.cfg-move:disabled { opacity: .3; cursor: default; }
+.btn.cfg-move:disabled:hover { border-color: var(--line); }
 #config-root code { color: var(--text-dim); font-size: 11px; }
 #config-root h2 { display: flex; align-items: center; }
 

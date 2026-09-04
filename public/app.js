@@ -45,7 +45,8 @@ function defaultDeal() {
     quoteDate: new Date().toISOString().slice(0, 10),
     vehicles: 20,
     users: 0,
-    selected: { tracking: true, fuel: true, routeBuilder: true, digitalJourney: true, stockMaster: false },
+    // No products pre-selected by default — the user builds the quote from scratch.
+    selected: {},
     hardware: {
       singleTank: 0, dualTank: 0, trailerQty: 0, outsideSA: false,
       items: {
@@ -61,7 +62,8 @@ function defaultDeal() {
         customInstall: [], // one-off installation lines: [{ desc, qty, rate }]
       },
     },
-    implementation: { activities: P.IMPL_ACTIVITIES.map((a) => ({ ...a })) },
+    // No implementation activities pre-enabled by default — the user opts each one in.
+    implementation: { activities: P.IMPL_ACTIVITIES.map((a) => ({ ...a, enabled: false })) },
     rental: { termMonths: 36, mode: 'Pure Rental' },
     // Proposal narrative overrides. Each field is null until the user edits it,
     // in which case it holds their custom text; otherwise the auto-generated copy
@@ -978,6 +980,76 @@ function boolIn(path) {
   return `<input type="checkbox" data-path="${path}" data-kind="bool" ${getPath(editCfg, path) ? 'checked' : ''}>`;
 }
 
+// --- CLIENT ACCESS LINKS -----------------------------------------------------
+// Per-client single sign-on links (a random token IS the credential — no
+// password). Stored server-side in their own table, separate from the shared
+// pricing config. Internal staff create/revoke them here; the token endpoint
+// (/client-access) is what actually signs a client in.
+let clientLinks = [];
+
+async function loadClientLinks() {
+  try { clientLinks = await api('GET', '/api/client-links'); } catch (e) { clientLinks = []; }
+  renderClientLinks();
+}
+
+function linkUrlFor(token) { return `${location.origin}/client-access?token=${token}`; }
+
+function renderClientLinks() {
+  const tb = document.getElementById('link-tbody');
+  const empty = document.getElementById('link-empty');
+  if (!tb) return;
+  tb.innerHTML = '';
+  empty.style.display = clientLinks.length ? 'none' : '';
+  clientLinks.forEach((l) => {
+    const tr = document.createElement('tr');
+    if (l.revoked) tr.className = 'row-off';
+    const url = linkUrlFor(l.token);
+    tr.innerHTML = `
+      <td>${escapeHtml(l.label || '(no label)')}</td>
+      <td><input class="cell-input" type="text" readonly value="${escapeHtml(url)}" style="width:100%;min-width:280px" onclick="this.select()"></td>
+      <td>${new Date(l.createdAt).toLocaleDateString()}</td>
+      <td>${l.revoked ? '<span class="link-tag revoked">revoked</span>' : '<span class="link-tag active">active</span>'}</td>
+      <td>
+        <button class="btn cfg-add" data-link-copy="${l.token}">📋 Copy</button>
+        ${l.revoked ? '' : `<button class="btn cfg-del" data-link-revoke="${l.id}">Revoke</button>`}
+      </td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function wireClientLinks() {
+  document.getElementById('link-create').addEventListener('click', async () => {
+    const input = document.getElementById('link-label');
+    const label = input.value.trim();
+    try {
+      await api('POST', '/api/client-links', { label });
+      input.value = '';
+      await loadClientLinks();
+    } catch (e) { alert('Failed to create link: ' + e.message); }
+  });
+  document.getElementById('link-tbody').addEventListener('click', async (e) => {
+    const copyToken = e.target.dataset.linkCopy;
+    const revokeId = e.target.dataset.linkRevoke;
+    if (copyToken) {
+      const url = linkUrlFor(copyToken);
+      const label = e.target.textContent;
+      try {
+        await navigator.clipboard.writeText(url);
+        e.target.textContent = '✓ Copied';
+      } catch (err) {
+        // Clipboard API unavailable (e.g. insecure context) — the link field is
+        // still click-to-select, so this isn't a dead end.
+        e.target.textContent = 'Select the link →';
+      }
+      setTimeout(() => { e.target.textContent = label; }, 1500);
+    } else if (revokeId) {
+      if (!confirm('Revoke this link? The client will no longer be able to sign in with it.')) return;
+      try { await api('DELETE', '/api/client-links/' + revokeId); await loadClientLinks(); }
+      catch (err) { alert('Failed to revoke: ' + err.message); }
+    }
+  });
+}
+
 function renderConfig() {
   const c = editCfg;
   const productOpts = (sel) => '<option value="">— none —</option>' +
@@ -988,8 +1060,13 @@ function renderConfig() {
       <option value="perUser" ${val === 'perUser' ? 'selected' : ''}>Per user</option>
       <option value="flat" ${val === 'flat' ? 'selected' : ''}>Flat / month</option>
     </select>`;
+  const moveBtns = (i, last) => `
+    <button class="btn cfg-move" data-move-up="products:${i}" title="Move up" ${i === 0 ? 'disabled' : ''}>▲</button>
+    <button class="btn cfg-move" data-move-down="products:${i}" title="Move down" ${i === last ? 'disabled' : ''}>▼</button>`;
+  const lastProduct = c.products.length - 1;
   const productRows = c.products.map((p, i) => `
     <tr>
+      <td class="reorder-cell">${moveBtns(i, lastProduct)}</td>
       <td>${textIn(`products.${i}.name`, 150)}</td>
       <td class="num">${numIn(`products.${i}.marginalCost`, 'money')}</td>
       <td class="num">${numIn(`products.${i}.targetGM`, 'pct')}</td>
@@ -1048,7 +1125,7 @@ function renderConfig() {
     <div class="card">
       <h2>Products <button class="btn cfg-add" data-add="product">＋ Add product</button></h2>
       <table class="data">
-        <thead><tr><th>Name</th><th class="num">Marginal Cost R</th><th class="num">Target GM %</th><th class="num">Step Threshold</th><th>Billing</th><th title="Eligible for bundle discount">Bundle?</th><th title="Eligible for volume discount">Volume?</th><th class="num">List Price R (auto)</th><th></th></tr></thead>
+        <thead><tr><th title="Display order — used everywhere products are listed">Order</th><th>Name</th><th class="num">Marginal Cost R</th><th class="num">Target GM %</th><th class="num">Step Threshold</th><th>Billing</th><th title="Eligible for bundle discount">Bundle?</th><th title="Eligible for volume discount">Volume?</th><th class="num">List Price R (auto)</th><th></th></tr></thead>
         <tbody>${productRows}</tbody>
       </table>
       <table class="kv compact"><tr><td>Step cost (R/mo per step)</td><td>${numIn('stepCost', 'money')}</td></tr></table>
@@ -1209,6 +1286,15 @@ function wireConfig() {
       else if (kind === 'hardwareCatalog') delete editCfg.hardwareCatalog[id];
       else if (kind === 'installItems') editCfg.installItems.splice(+id, 1);
       renderConfig();
+    } else if (e.target.dataset.moveUp || e.target.dataset.moveDown) {
+      const dir = e.target.dataset.moveUp ? -1 : 1;
+      const [kind, idxStr] = (e.target.dataset.moveUp || e.target.dataset.moveDown).split(':');
+      const arr = editCfg[kind];
+      const i = +idxStr, j = i + dir;
+      if (Array.isArray(arr) && j >= 0 && j < arr.length) {
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+        renderConfig();
+      }
     }
   });
 
@@ -1265,9 +1351,11 @@ async function init() {
   initCurrencySelector();
   wireInputs();
   wireConfig();
+  wireClientLinks();
   syncInputsFromDeal();
   renderConfig();
   recompute();
+  loadClientLinks();
 
   document.getElementById('drawer-toggle').addEventListener('click', () => {
     document.getElementById('drawer').classList.toggle('open'); refreshQuoteList();

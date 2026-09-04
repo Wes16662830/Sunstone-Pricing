@@ -17,3 +17,15 @@ CREATE TABLE IF NOT EXISTS config (
   data_json   TEXT NOT NULL,
   updated_at  TEXT NOT NULL
 );
+
+-- Per-client magic access links (/client-access?token=...). The token itself is
+-- the credential — visiting a valid, unrevoked link signs the browser in as a
+-- client with no separate password. Created/revoked from Config → Client Access
+-- Links by internal staff.
+CREATE TABLE IF NOT EXISTS client_links (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  token       TEXT NOT NULL UNIQUE,
+  label       TEXT,
+  created_at  TEXT NOT NULL,
+  revoked     INTEGER NOT NULL DEFAULT 0
+);
