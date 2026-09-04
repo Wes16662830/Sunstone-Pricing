@@ -74,7 +74,13 @@ export function clientCookie(request, token) {
 function cookieFor(name, request, token) {
   const secure = new URL(request.url).protocol === 'https:' ? ' Secure;' : '';
   const maxAge = token ? SESSION_TTL_MS / 1000 : 0;
-  return `${name}=${token || ''}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge};${secure}`;
+  // SameSite=Lax (NOT Strict): a client opens their magic link from an email or
+  // chat, which is a cross-site initiator. Under Strict the browser refuses to
+  // send the cookie we just issued on the redirect to /quote, so the client is
+  // bounced to the access-code page. Lax sends it on top-level GET navigations
+  // while still withholding it from cross-site POSTs, so CSRF cover is kept
+  // (every state-changing endpoint here is POST/PUT/DELETE).
+  return `${name}=${token || ''}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge};${secure}`;
 }
 
 // Load the saved global pricing config (single D1 row) into the shared engine,

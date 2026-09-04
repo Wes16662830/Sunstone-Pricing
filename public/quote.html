@@ -72,6 +72,20 @@
       #quote-doc { position:absolute; left:0; top:0; width:100%; display:block !important;
         border:none; box-shadow:none; padding:0; margin:0; }
     }
+
+    /* --- refinement pass: match the internal tool's rhythm + depth --- */
+    main { max-width: 1020px; }
+    .card { border-radius: 12px; box-shadow: 0 1px 2px rgba(20,30,50,.05); padding: 20px 22px; }
+    h2 { padding-bottom: 9px; border-bottom: 1px solid var(--soft); letter-spacing: .7px; }
+    .field input, .topbar select, .btn { transition: border-color .12s, box-shadow .12s, background .12s; }
+    .field input:focus, .topbar select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(245,166,35,.22); }
+    .btn:active, .btn-primary:active { transform: translateY(1px); }
+    .prod { padding: 12px 4px; gap: 12px; }
+    .prod:hover { background: #fafbfc; border-radius: 8px; }
+    .prod .pprice { font-size: 13px; line-height: 1.5; }
+    .result .big { letter-spacing: -1px; }
+    .rrow { padding: 9px 0; }
+    .disc { border-radius: 8px; line-height: 1.55; }
   </style>
 </head>
 <body>

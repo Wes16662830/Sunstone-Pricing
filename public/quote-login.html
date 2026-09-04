@@ -22,6 +22,12 @@
     button:hover { background:#ffb733; }
     .msg { color:var(--bad); font-size:12px; min-height:16px; margin-top:10px; }
     .note { font-size:11px; color:var(--dim); margin-top:16px; line-height:1.5; }
+
+    .card { border-radius: 12px; box-shadow: 0 10px 30px rgba(10,15,25,.10); }
+    input { transition: border-color .12s, box-shadow .12s; }
+    input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(245,166,35,.22); }
+    button { transition: background .12s; }
+    button:active { transform: translateY(1px); }
   </style>
 </head>
 <body>

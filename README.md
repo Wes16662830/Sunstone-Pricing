@@ -89,10 +89,17 @@ There are two ways a client gets in:
    link from **Config → Client Access Links**. The link
    (`/client-access?token=…`) carries a long random token that IS the credential:
    opening it signs the browser straight into `/quote` (and `/prices`), no
-   password needed. Each link is independently **revocable** — revoking one
-   client's link cuts off only that client, without touching the shared password
-   or anyone else's link. Links are stored in their own table (`client_links`),
-   separate from the pricing config.
+   password needed. Each link is independently **revocable and reactivatable** —
+   revoking one client's link cuts off only that client, without touching the
+   shared password or anyone else's link, and reactivating it makes the *same*
+   URL work again (no need to issue and re-send a new one). Links are stored in
+   their own table (`client_links`), separate from the pricing config.
+
+   Session cookies use `SameSite=Lax`, **not** `Strict`: a client opens their
+   magic link from an email or chat, which is a cross-site initiator, and under
+   `Strict` the browser refuses to send the cookie just issued on the redirect to
+   `/quote` — bouncing the client to the access-code page. `Lax` still withholds
+   cookies from cross-site POSTs, so CSRF cover is retained.
 
 There is also a read-only **price-list page at `/prices`** (same client password):
 a single reference sheet of all standard list pricing and published discount

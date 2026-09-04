@@ -244,7 +244,19 @@ function check(name, cond, detail) {
   await fp.waitForTimeout(400);
   check('revoked link no longer signs in', /quote-login/.test(fp.url()), fp.url());
 
-  console.log('\n=== 15. No JS errors in internal app overall ===');
+  console.log('\n=== 15. Reactivating a revoked link ===');
+  await p.waitForSelector('button[data-link-restore]');
+  await p.locator('button[data-link-restore]').first().click();
+  await p.waitForTimeout(700);
+  const statusReactivated = await p.$eval('#link-tbody tr td:nth-child(4)', (el) => el.innerText.trim());
+  check('link shows active again', /active/i.test(statusReactivated), statusReactivated);
+  const rctx = await b.newContext();
+  const rp = await rctx.newPage();
+  await rp.goto(linkUrl);
+  await rp.waitForTimeout(600);
+  check('the SAME url signs in again after reactivation', /\/quote$/.test(rp.url()), rp.url());
+
+  console.log('\n=== 16. No JS errors in internal app overall ===');
   check('internal app raised no page/console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   console.log(`\n================ UI: ${pass} passed, ${fail} failed ================`);
