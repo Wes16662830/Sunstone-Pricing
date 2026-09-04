@@ -8,14 +8,17 @@
  *     CLIENT cookie (a valid internal session is also accepted). This area only
  *     ever serves margin-safe data, so it is safe to share with clients while
  *     the internal app stays locked down.
- * Only the two login endpoints + login pages (+ favicon) are fully open.
+ * Only the two login endpoints + login pages (+ favicon) are fully open, plus
+ * /client-access — a per-client magic link whose token IS the credential; the
+ * handler itself validates the token and issues the client session.
  */
 import { COOKIE, CLIENT_COOKIE, verifyToken, getCookie } from './_shared.js';
 
-// Fully open: login endpoints + login pages, favicon.
+// Fully open: login endpoints + login pages, favicon, magic-link redemption.
 const OPEN_PATHS = new Set([
   '/login', '/login.html', '/favicon.ico',
   '/quote-login', '/quote-login.html',
+  '/client-access',
 ]);
 // Client area static assets (client cookie — or internal — required). These
 // carry no cost/margin data. Everything else falls through to the internal gate.
