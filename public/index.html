@@ -23,34 +23,22 @@
     <div class="brand">
       <span class="logo">◧</span>
       <div>
-        <div class="brand-title">Sunstone Pricing Calculator</div>
+        <div class="brand-title">Sunstone Pricing</div>
         <div class="brand-sub">Sunstone Logistic Systems — internal quoting tool</div>
       </div>
     </div>
-    <div class="deal-inputs">
-      <label>Customer
-        <input id="in-customer" type="text" placeholder="Customer name" />
-      </label>
-      <label>Vehicles
-        <input id="in-vehicles" type="number" min="0" step="1" value="20" />
-      </label>
-      <label>Users
-        <input id="in-users" type="number" min="0" step="1" value="0" title="Used by products billed per user" />
-      </label>
-      <label>Quote date
-        <input id="in-date" type="date" />
-      </label>
-    </div>
     <div class="topbar-actions">
+      <div id="view-badge" class="view-badge internal" title="Current on-screen mode">INTERNAL</div>
       <label class="cur-picker" title="Display currency (converted from Rands)">
         <select id="currency-select" class="cell-input"></select>
       </label>
-      <div id="view-badge" class="view-badge internal" title="Current on-screen mode">INTERNAL VIEW</div>
-      <a class="btn" href="/prices" target="_blank" rel="noopener" title="Read-only price list — safe to open yourself or send the link to a client">📋 Client Price List</a>
-      <a class="btn" href="/quote" target="_blank" rel="noopener" title="Self-service subscription quote builder — safe to send to a client">🧮 Client Quote Page</a>
-      <button id="btn-theme" class="btn" title="Toggle light / dark theme">🌙 Dark</button>
-      <button id="btn-present" class="btn" title="Hide internal cost/margin on screen for client-facing presentation">👁 Presentation mode</button>
-      <button id="btn-logout" class="btn">Sign out</button>
+      <span class="topbar-sep" aria-hidden="true"></span>
+      <a class="btn btn-quiet" href="/prices" target="_blank" rel="noopener" title="Read-only price list — safe to open yourself or send the link to a client">📋 Price list</a>
+      <a class="btn btn-quiet" href="/quote" target="_blank" rel="noopener" title="Self-service subscription quote builder — safe to send to a client">🧮 Quote page</a>
+      <span class="topbar-sep" aria-hidden="true"></span>
+      <button id="btn-theme" class="btn btn-quiet" title="Toggle light / dark theme">🌙 Dark</button>
+      <button id="btn-present" class="btn btn-quiet" title="Hide internal cost/margin on screen for client-facing presentation">👁 Presentation</button>
+      <button id="btn-logout" class="btn btn-quiet">Sign out</button>
     </div>
   </header>
 
@@ -64,6 +52,30 @@
     <button class="tab tab-internal unlocked" data-tab="margin" id="tab-margin">Internal Margin</button>
     <button class="tab tab-internal unlocked" data-tab="config" id="tab-config">⚙ Config</button>
   </nav>
+
+  <!-- Per-quote context. Deliberately separate from the top bar (which is app
+       chrome) — these are inputs that belong to the deal, and they stay visible
+       across every tab. -->
+  <div class="dealbar">
+    <div class="dealbar-inner">
+      <label class="field grow">
+        <span>Customer</span>
+        <input id="in-customer" type="text" placeholder="Customer name" />
+      </label>
+      <label class="field">
+        <span>Vehicles</span>
+        <input id="in-vehicles" type="number" min="0" step="1" value="20" />
+      </label>
+      <label class="field">
+        <span>Users</span>
+        <input id="in-users" type="number" min="0" step="1" value="0" title="Used by products billed per user" />
+      </label>
+      <label class="field">
+        <span>Quote date</span>
+        <input id="in-date" type="date" />
+      </label>
+    </div>
+  </div>
 
   <main id="main">
     <!-- SUBSCRIPTION -->
@@ -244,7 +256,7 @@
         <p class="note" id="link-empty" style="display:none">No client links yet — create one above.</p>
       </div>
 
-      <div class="banner banner-warn">Global pricing configuration — edits here apply to <strong>every quote, for everyone</strong> (shared, stored server-side). Click <strong>Save configuration</strong> to apply.</div>
+      <div class="banner banner-caution">Global pricing configuration — edits here apply to <strong>every quote, for everyone</strong> (shared, stored server-side). Click <strong>Save configuration</strong> to apply.</div>
       <div class="config-actions">
         <button id="cfg-save" class="btn btn-primary">💾 Save configuration</button>
         <button id="cfg-reload" class="btn">↻ Reload saved</button>
