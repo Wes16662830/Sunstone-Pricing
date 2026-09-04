@@ -106,7 +106,9 @@ only; no cost, target GM or step cost). The two pages cross-link.
 
 1. **Site password gate (real, server-side).** The entire app is behind a single
    shared password checked by the server. A signed HttpOnly session cookie is
-   issued on login (HMAC-SHA256, 12h expiry). Every route — including `pricing.js`,
+   issued on login (HMAC-SHA256, 12h expiry). Sessions are **audience-bound** —
+   the audience (`staff` / `client`) is part of the signed message, so a client
+   token cannot be renamed into the staff cookie to escalate privileges. Every route — including `pricing.js`,
    which carries the cost/margin constants — returns 401/redirect until you are
    authenticated, so **cost and margin figures are never served to an un-signed-in
    browser.** This is the real protection. Set the password via the `PASSWORD`

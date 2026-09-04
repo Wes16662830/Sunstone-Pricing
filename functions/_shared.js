@@ -29,16 +29,23 @@ async function hmacHex(secret, msg) {
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function makeToken(secret) {
+// Sessions are AUDIENCE-BOUND: the audience ("staff" / "client") is part of the
+// signed message, so a client token cannot be renamed into the staff cookie to
+// escalate privileges (and vice-versa). Without this both cookies are signed
+// identically and are interchangeable — a client could read cost/margin data.
+export const AUD_STAFF = 'staff';
+export const AUD_CLIENT = 'client';
+
+export async function makeToken(secret, aud) {
   const expiry = Date.now() + SESSION_TTL_MS;
-  return `${expiry}.${await hmacHex(secret, String(expiry))}`;
+  return `${expiry}.${await hmacHex(secret, `${aud}:${expiry}`)}`;
 }
 
-export async function verifyToken(secret, token) {
+export async function verifyToken(secret, token, aud) {
   if (!secret || !token || !token.includes('.')) return false;
   const [expiry, mac] = token.split('.');
   if (!/^\d+$/.test(expiry) || Number(expiry) < Date.now()) return false;
-  const expected = await hmacHex(secret, expiry);
+  const expected = await hmacHex(secret, `${aud}:${expiry}`);
   if (mac.length !== expected.length) return false;
   let diff = 0;
   for (let i = 0; i < mac.length; i++) diff |= mac.charCodeAt(i) ^ expected.charCodeAt(i);

@@ -12,7 +12,7 @@
  * /client-access — a per-client magic link whose token IS the credential; the
  * handler itself validates the token and issues the client session.
  */
-import { COOKIE, CLIENT_COOKIE, verifyToken, getCookie } from './_shared.js';
+import { COOKIE, CLIENT_COOKIE, AUD_STAFF, AUD_CLIENT, verifyToken, getCookie } from './_shared.js';
 
 // Fully open: login endpoints + login pages, favicon, magic-link redemption.
 const OPEN_PATHS = new Set([
@@ -41,15 +41,15 @@ export async function onRequest(context) {
 
   // Client quote area — client cookie, or a valid internal session.
   if (p.startsWith('/api/client/') || CLIENT_ASSETS.has(p)) {
-    const ok = (await verifyToken(env.SESSION_SECRET, getCookie(request, CLIENT_COOKIE)))
-      || (await verifyToken(env.SESSION_SECRET, getCookie(request, COOKIE)));
+    const ok = (await verifyToken(env.SESSION_SECRET, getCookie(request, CLIENT_COOKIE), AUD_CLIENT))
+      || (await verifyToken(env.SESSION_SECRET, getCookie(request, COOKIE), AUD_STAFF));
     if (ok) return next();
     if (p.startsWith('/api/')) return unauth();
     return Response.redirect(`${url.origin}/quote-login?next=${encodeURIComponent(p)}`, 302);
   }
 
   // Internal app — staff session only.
-  const authed = await verifyToken(env.SESSION_SECRET, getCookie(request, COOKIE));
+  const authed = await verifyToken(env.SESSION_SECRET, getCookie(request, COOKIE), AUD_STAFF);
   if (authed) return next();
   if (p.startsWith('/api/')) return unauth();
   return Response.redirect(`${url.origin}/login?next=${encodeURIComponent(p)}`, 302);

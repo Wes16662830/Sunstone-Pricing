@@ -6,7 +6,7 @@
  * password-based /quote-login would) and sends the browser into the quote tool.
  * Listed as an OPEN_PATH in _middleware.js so the request reaches this handler.
  */
-import { makeToken, clientCookie } from './_shared.js';
+import { makeToken, clientCookie, AUD_CLIENT } from './_shared.js';
 
 export async function onRequestGet({ request, env }) {
   const url = new URL(request.url);
@@ -15,7 +15,7 @@ export async function onRequestGet({ request, env }) {
     ? await env.DB.prepare('SELECT id FROM client_links WHERE token = ? AND revoked = 0').bind(token).first()
     : null;
   if (row) {
-    const sessionToken = await makeToken(env.SESSION_SECRET);
+    const sessionToken = await makeToken(env.SESSION_SECRET, AUD_CLIENT);
     return new Response(null, { status: 302, headers: { Location: '/quote', 'Set-Cookie': clientCookie(request, sessionToken) } });
   }
   // Unknown / revoked token — fall back to the manual client login.
