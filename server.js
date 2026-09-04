@@ -209,7 +209,7 @@ async function handleApi(req, res) {
     const body = await readBody(req).catch(() => ({}));
     // Trim both sides — pasted secrets often carry a trailing newline/space.
     if (body.password && String(body.password).trim() === String(PASSWORD).trim()) {
-      const cookie = `${COOKIE}=${makeToken(AUD_STAFF)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
+      const cookie = `${COOKIE}=${makeToken(AUD_STAFF)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
       return sendJSON(res, 200, { ok: true }, { 'Set-Cookie': cookie });
     }
     return sendJSON(res, 401, { error: 'invalid password' });
@@ -224,7 +224,7 @@ async function handleApi(req, res) {
     if (parts[2] === 'login' && req.method === 'POST') {
       const body = await readBody(req).catch(() => ({}));
       if (body.password && String(body.password).trim() === String(CLIENT_PASSWORD).trim()) {
-        const cookie = `${CLIENT_COOKIE}=${makeToken(AUD_CLIENT)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
+        const cookie = `${CLIENT_COOKIE}=${makeToken(AUD_CLIENT)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
         return sendJSON(res, 200, { ok: true }, { 'Set-Cookie': cookie });
       }
       return sendJSON(res, 401, { error: 'invalid password' });
@@ -301,9 +301,20 @@ async function handleApi(req, res) {
           .run(token, label, ts);
         return sendJSON(res, 201, rowToClientLink(db.prepare('SELECT * FROM client_links WHERE id = ?').get(info.lastInsertRowid)));
       }
+      // Revoke (soft delete) — kept as DELETE for backwards compatibility.
       if (req.method === 'DELETE' && id) {
         db.prepare('UPDATE client_links SET revoked = 1 WHERE id = ?').run(Number(id));
         return sendJSON(res, 200, { ok: true });
+      }
+      // Toggle revoked state — { revoked: false } reactivates a revoked link so
+      // the same URL works again without having to issue (and re-send) a new one.
+      if (req.method === 'PUT' && id) {
+        const body = await readBody(req).catch(() => ({}));
+        const revoked = body.revoked ? 1 : 0;
+        const existing = db.prepare('SELECT * FROM client_links WHERE id = ?').get(Number(id));
+        if (!existing) return sendJSON(res, 404, { error: 'not found' });
+        db.prepare('UPDATE client_links SET revoked = ? WHERE id = ?').run(revoked, Number(id));
+        return sendJSON(res, 200, rowToClientLink(db.prepare('SELECT * FROM client_links WHERE id = ?').get(Number(id))));
       }
     }
 
@@ -366,7 +377,7 @@ const server = http.createServer((req, res) => {
     const row = token && db.prepare('SELECT * FROM client_links WHERE token = ? AND revoked = 0').get(token);
     const secureFlag = (req.headers['x-forwarded-proto'] === 'https') ? ' Secure;' : '';
     if (row) {
-      const cookie = `${CLIENT_COOKIE}=${makeToken(AUD_CLIENT)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
+      const cookie = `${CLIENT_COOKIE}=${makeToken(AUD_CLIENT)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
       res.writeHead(302, { Location: '/quote', 'Set-Cookie': cookie });
       return res.end();
     }

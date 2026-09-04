@@ -44,7 +44,8 @@ function cookieFrom(res, name) {
   check('internal login sets sps_session cookie', !!staffCookie);
   const scRaw = (r.headers.getSetCookie ? r.headers.getSetCookie() : []).join(';');
   check('session cookie is HttpOnly', /HttpOnly/i.test(scRaw), scRaw);
-  check('session cookie is SameSite=Strict', /SameSite=Strict/i.test(scRaw), scRaw);
+  check('session cookie is SameSite=Lax (magic links must survive a cross-site click)',
+    /SameSite=Lax/i.test(scRaw), scRaw);
 
   r = await req('/api/client/login', { method: 'POST', body: { password: 'wrong' } });
   check('client login rejects wrong password', r.status === 401, `got ${r.status}`);
@@ -220,6 +221,25 @@ function cookieFrom(res, name) {
   // already-issued session survives revocation? (documented behaviour check)
   r = await req('/quote', { cookie: magicCookie });
   findings.push({ name: 'INFO: session issued before revoke still valid', detail: `status ${r.status} (cookie is a standalone 12h session; revoke blocks NEW redemptions only)` });
+
+  // reactivate the revoked link — same URL must work again
+  r = await req('/api/client-links/' + link.id, { method: 'PUT', cookie: staffCookie, body: { revoked: false } });
+  check('reactivate link 200', r.status === 200 && r.json && r.json.revoked === false, `${r.status} ${JSON.stringify(r.json)}`);
+  r = await req('/client-access?token=' + link.token);
+  const reCookie = cookieFrom(r, 'sps_client');
+  check('reactivated token signs in again', r.status === 302 && /\/quote$/.test(r.location || '') && !!reCookie, `${r.status} ${r.location}`);
+  check('reactivated cookie is SameSite=Lax', /SameSite=Lax/i.test((r.headers.getSetCookie ? r.headers.getSetCookie() : []).join(';')));
+  r = await req('/api/client-links', { cookie: staffCookie });
+  check('reactivated link listed as active', (r.json.find((l) => l.id === link.id) || {}).revoked === false);
+  // re-revoke, and confirm PUT{revoked:true} also works
+  r = await req('/api/client-links/' + link.id, { method: 'PUT', cookie: staffCookie, body: { revoked: true } });
+  check('PUT revoked:true re-revokes', r.status === 200 && r.json.revoked === true, JSON.stringify(r.json));
+  r = await req('/client-access?token=' + link.token);
+  check('re-revoked token denied again', r.status === 302 && /quote-login/.test(r.location || ''), `${r.status} ${r.location}`);
+  r = await req('/api/client-links/999999', { method: 'PUT', cookie: staffCookie, body: { revoked: false } });
+  check('reactivate missing link -> 404', r.status === 404, `got ${r.status}`);
+  r = await req('/api/client-links/' + link.id, { method: 'PUT', cookie: clientCookie, body: { revoked: false } });
+  check('client cookie cannot reactivate a link', r.status === 401, `got ${r.status}`);
 
   console.log('\n=== 11. METHOD / MALFORMED handling ===');
   r = await req('/api/client-links', { method: 'DELETE', cookie: staffCookie });

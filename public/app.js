@@ -1011,7 +1011,9 @@ function renderClientLinks() {
       <td>${l.revoked ? '<span class="link-tag revoked">revoked</span>' : '<span class="link-tag active">active</span>'}</td>
       <td>
         <button class="btn cfg-add" data-link-copy="${l.token}">📋 Copy</button>
-        ${l.revoked ? '' : `<button class="btn cfg-del" data-link-revoke="${l.id}">Revoke</button>`}
+        ${l.revoked
+          ? `<button class="btn cfg-add" data-link-restore="${l.id}" title="Make this link work again — the same URL becomes valid">↻ Reactivate</button>`
+          : `<button class="btn cfg-del" data-link-revoke="${l.id}">Revoke</button>`}
       </td>`;
     tb.appendChild(tr);
   });
@@ -1046,6 +1048,10 @@ function wireClientLinks() {
       if (!confirm('Revoke this link? The client will no longer be able to sign in with it.')) return;
       try { await api('DELETE', '/api/client-links/' + revokeId); await loadClientLinks(); }
       catch (err) { alert('Failed to revoke: ' + err.message); }
+    } else if (e.target.dataset.linkRestore) {
+      const id = e.target.dataset.linkRestore;
+      try { await api('PUT', '/api/client-links/' + id, { revoked: false }); await loadClientLinks(); }
+      catch (err) { alert('Failed to reactivate: ' + err.message); }
     }
   });
 }
