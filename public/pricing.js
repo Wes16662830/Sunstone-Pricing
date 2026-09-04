@@ -238,8 +238,10 @@
   // SUBSCRIPTION
   // ---------------------------------------------------------------------------
   function calcSubscription(input) {
-    const vehicles = Number(input.vehicles) || 0;
-    const users = Number(input.users) || 0;
+    // Clamp to >= 0: a negative fleet/user count is meaningless and would
+    // otherwise produce a negative quote total.
+    const vehicles = Math.max(0, Number(input.vehicles) || 0);
+    const users = Math.max(0, Number(input.users) || 0);
     const selected = input.selected || {};
     const products = activeConfig.products;
 
@@ -348,8 +350,10 @@
       baseRows.push({ id: 'cat:' + k, catalogItem: true, catalogKey: k, desc: cat[k].sku, include: !!sel.include, qty, unit: sellPrice(cat[k]) });
     });
 
-    // Legacy one-off custom rows (kept for older saved quotes).
+    // Legacy one-off custom rows (kept for older saved quotes). Skip a
+    // null/garbage entry rather than throwing on it.
     (it.custom || []).forEach((cu, i) => {
+      if (!cu || typeof cu !== 'object') return;
       const c = item(cu.key);
       baseRows.push({ id: 'custom:' + i, custom: true, catalogKey: cu.key, desc: c.sku, include: true, qty: Number(cu.qty) || 0, unit: sellPrice(c) });
     });
@@ -385,7 +389,10 @@
     });
 
     // Manually-added one-off installation lines: [{ desc, qty, rate }].
+    // Guard against a null/garbage entry in a saved quote — one bad row must not
+    // throw and take down the whole compute/render pipeline.
     (it.customInstall || []).forEach((ci, i) => {
+      if (!ci || typeof ci !== 'object') return;
       baseInstall.push({ id: 'customInstall:' + i, custom: true, desc: ci.desc || 'Installation', qty: Number(ci.qty) || 0, rate: Number(ci.rate) || 0 });
     });
 

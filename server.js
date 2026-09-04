@@ -70,18 +70,24 @@ const newLinkToken = () => crypto.randomBytes(24).toString('hex');
 const rowToClientLink = (r) => ({ id: r.id, token: r.token, label: r.label, createdAt: r.created_at, revoked: !!r.revoked });
 
 // --- Auth helpers ---------------------------------------------------------
-function sign(expiry) {
-  return crypto.createHmac('sha256', SESSION_SECRET).update(String(expiry)).digest('hex');
+// Sessions are AUDIENCE-BOUND: the audience ("staff" / "client") is part of the
+// signed message, so a client token cannot be renamed into the staff cookie to
+// escalate privileges (and vice-versa). Without this, both cookies are signed
+// identically and are interchangeable — a client could read cost/margin data.
+const AUD_STAFF = 'staff';
+const AUD_CLIENT = 'client';
+function sign(expiry, aud) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(`${aud}:${expiry}`).digest('hex');
 }
-function makeToken() {
+function makeToken(aud) {
   const expiry = Date.now() + SESSION_TTL_MS;
-  return `${expiry}.${sign(expiry)}`;
+  return `${expiry}.${sign(expiry, aud)}`;
 }
-function verifyToken(token) {
+function verifyToken(token, aud) {
   if (!token || !token.includes('.')) return false;
   const [expiry, mac] = token.split('.');
   if (!/^\d+$/.test(expiry) || Number(expiry) < Date.now()) return false;
-  const expected = sign(expiry);
+  const expected = sign(expiry, aud);
   const a = Buffer.from(mac, 'utf8'), b = Buffer.from(expected, 'utf8');
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
@@ -93,8 +99,8 @@ function parseCookies(req) {
   });
   return out;
 }
-function isAuthed(req) { return verifyToken(parseCookies(req)[COOKIE]); }
-function isClientAuthed(req) { return verifyToken(parseCookies(req)[CLIENT_COOKIE]); }
+function isAuthed(req) { return verifyToken(parseCookies(req)[COOKIE], AUD_STAFF); }
+function isClientAuthed(req) { return verifyToken(parseCookies(req)[CLIENT_COOKIE], AUD_CLIENT); }
 
 // Load the saved global config (or workbook defaults) into the shared engine
 // immediately before a synchronous compute for the client quote endpoints.
@@ -203,7 +209,7 @@ async function handleApi(req, res) {
     const body = await readBody(req).catch(() => ({}));
     // Trim both sides — pasted secrets often carry a trailing newline/space.
     if (body.password && String(body.password).trim() === String(PASSWORD).trim()) {
-      const cookie = `${COOKIE}=${makeToken()}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
+      const cookie = `${COOKIE}=${makeToken(AUD_STAFF)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
       return sendJSON(res, 200, { ok: true }, { 'Set-Cookie': cookie });
     }
     return sendJSON(res, 401, { error: 'invalid password' });
@@ -218,7 +224,7 @@ async function handleApi(req, res) {
     if (parts[2] === 'login' && req.method === 'POST') {
       const body = await readBody(req).catch(() => ({}));
       if (body.password && String(body.password).trim() === String(CLIENT_PASSWORD).trim()) {
-        const cookie = `${CLIENT_COOKIE}=${makeToken()}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
+        const cookie = `${CLIENT_COOKIE}=${makeToken(AUD_CLIENT)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
         return sendJSON(res, 200, { ok: true }, { 'Set-Cookie': cookie });
       }
       return sendJSON(res, 401, { error: 'invalid password' });
@@ -360,7 +366,7 @@ const server = http.createServer((req, res) => {
     const row = token && db.prepare('SELECT * FROM client_links WHERE token = ? AND revoked = 0').get(token);
     const secureFlag = (req.headers['x-forwarded-proto'] === 'https') ? ' Secure;' : '';
     if (row) {
-      const cookie = `${CLIENT_COOKIE}=${makeToken()}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
+      const cookie = `${CLIENT_COOKIE}=${makeToken(AUD_CLIENT)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_MS / 1000};${secureFlag}`;
       res.writeHead(302, { Location: '/quote', 'Set-Cookie': cookie });
       return res.end();
     }
