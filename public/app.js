@@ -1013,7 +1013,8 @@ function renderClientLinks() {
         <button class="btn cfg-add" data-link-copy="${l.token}">📋 Copy</button>
         ${l.revoked
           ? `<button class="btn cfg-add" data-link-restore="${l.id}" title="Make this link work again — the same URL becomes valid">↻ Reactivate</button>`
-          : `<button class="btn cfg-del" data-link-revoke="${l.id}">Revoke</button>`}
+          : `<button class="btn cfg-del" data-link-revoke="${l.id}" title="Stop this link working, but keep it here so it can be reactivated later">Revoke</button>`}
+        <button class="btn cfg-del" data-link-delete="${l.id}" title="Remove this link permanently — it cannot be reactivated">🗑 Delete</button>
       </td>`;
     tb.appendChild(tr);
   });
@@ -1052,6 +1053,15 @@ function wireClientLinks() {
       const id = e.target.dataset.linkRestore;
       try { await api('PUT', '/api/client-links/' + id, { revoked: false }); await loadClientLinks(); }
       catch (err) { alert('Failed to reactivate: ' + err.message); }
+    } else if (e.target.dataset.linkDelete) {
+      const id = e.target.dataset.linkDelete;
+      const link = clientLinks.find((l) => String(l.id) === String(id));
+      const name = (link && link.label) || 'this link';
+      // Permanent: unlike Revoke there is no way back, so name the link in the
+      // prompt to make it obvious which row is about to disappear.
+      if (!confirm(`Delete "${name}" permanently?\n\nThe link stops working and is removed from this list. This cannot be undone — use Revoke instead if you may want it back later.`)) return;
+      try { await api('DELETE', '/api/client-links/' + id + '?purge=1'); await loadClientLinks(); }
+      catch (err) { alert('Failed to delete: ' + err.message); }
     }
   });
 }

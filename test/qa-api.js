@@ -241,6 +241,26 @@ function cookieFrom(res, name) {
   r = await req('/api/client-links/' + link.id, { method: 'PUT', cookie: clientCookie, body: { revoked: false } });
   check('client cookie cannot reactivate a link', r.status === 401, `got ${r.status}`);
 
+  // permanent delete (?purge=1) — the row goes away and cannot be reactivated
+  r = await req('/api/client-links', { method: 'POST', cookie: staffCookie, body: { label: 'QA Purge Me' } });
+  const doomed = r.json;
+  check('create link to purge 201', r.status === 201 && !!doomed.token, `got ${r.status}`);
+  r = await req('/api/client-links/' + doomed.id + '?purge=1', { method: 'DELETE', cookie: clientCookie });
+  check('client cookie cannot purge a link', r.status === 401, `got ${r.status}`);
+  r = await req('/api/client-links/' + doomed.id + '?purge=1', { method: 'DELETE', cookie: staffCookie });
+  check('purge link 200', r.status === 200 && r.json && r.json.deleted === true, `${r.status} ${JSON.stringify(r.json)}`);
+  r = await req('/api/client-links', { cookie: staffCookie });
+  check('purged link gone from list', !r.json.some((l) => l.id === doomed.id));
+  r = await req('/client-access?token=' + doomed.token);
+  check('purged token denied', r.status === 302 && /quote-login/.test(r.location || '') && !cookieFrom(r, 'sps_client'), `${r.status} ${r.location}`);
+  r = await req('/api/client-links/' + doomed.id, { method: 'PUT', cookie: staffCookie, body: { revoked: false } });
+  check('purged link cannot be reactivated -> 404', r.status === 404, `got ${r.status}`);
+  r = await req('/api/client-links/999999?purge=1', { method: 'DELETE', cookie: staffCookie });
+  check('purge missing link -> 404', r.status === 404, `got ${r.status}`);
+  // the other links must be untouched by the purge
+  r = await req('/api/client-links', { cookie: staffCookie });
+  check('purge left the other link intact', r.json.some((l) => l.id === link.id));
+
   console.log('\n=== 11. METHOD / MALFORMED handling ===');
   r = await req('/api/client-links', { method: 'DELETE', cookie: staffCookie });
   check('DELETE /api/client-links (no id) not 500', r.status !== 500, `got ${r.status}`);

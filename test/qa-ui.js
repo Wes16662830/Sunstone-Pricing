@@ -256,7 +256,31 @@ function check(name, cond, detail) {
   await rp.waitForTimeout(600);
   check('the SAME url signs in again after reactivation', /\/quote$/.test(rp.url()), rp.url());
 
-  console.log('\n=== 16. No JS errors in internal app overall ===');
+  console.log('\n=== 16. Deleting a link permanently ===');
+  await p.click('#link-create');           // a second link, so we delete one and keep one
+  await p.waitForTimeout(700);
+  const rowsBefore = await p.locator('#link-tbody tr').count();
+  // Delete the row holding OUR link specifically — rows are newest-first, so
+  // "first" would hit the one just created, not the one we then check is dead.
+  const targetId = await p.locator('#link-tbody tr').evaluateAll((rows, u) => {
+    const row = rows.find((r) => (r.querySelector('input[readonly]') || {}).value === u);
+    return row ? row.querySelector('button[data-link-delete]').dataset.linkDelete : null;
+  }, linkUrl);
+  check('found the row for our link', !!targetId);
+  await p.locator(`button[data-link-delete="${targetId}"]`).click();
+  await p.waitForTimeout(700);
+  const rowsAfter = await p.locator('#link-tbody tr').count();
+  check('deleted link disappears from the list', rowsAfter === rowsBefore - 1, `${rowsBefore} -> ${rowsAfter}`);
+  const gone = await p.locator('#link-tbody tr td input[readonly]').evaluateAll(
+    (els, u) => els.every((e) => e.value !== u), linkUrl);
+  check('deleted link url no longer listed', gone);
+  const dctx = await b.newContext();
+  const dp = await dctx.newPage();
+  await dp.goto(linkUrl);
+  await dp.waitForTimeout(600);
+  check('deleted link no longer signs in', /quote-login/.test(dp.url()), dp.url());
+
+  console.log('\n=== 17. No JS errors in internal app overall ===');
   check('internal app raised no page/console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
   console.log(`\n================ UI: ${pass} passed, ${fail} failed ================`);

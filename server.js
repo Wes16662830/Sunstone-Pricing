@@ -301,8 +301,16 @@ async function handleApi(req, res) {
           .run(token, label, ts);
         return sendJSON(res, 201, rowToClientLink(db.prepare('SELECT * FROM client_links WHERE id = ?').get(info.lastInsertRowid)));
       }
-      // Revoke (soft delete) — kept as DELETE for backwards compatibility.
+      // DELETE = revoke (soft) by default, so the row stays visible and can be
+      // reactivated. ?purge=1 removes the row outright: the token stops
+      // resolving and the link disappears from the list for good.
       if (req.method === 'DELETE' && id) {
+        if (url.searchParams.get('purge') === '1') {
+          const existing = db.prepare('SELECT id FROM client_links WHERE id = ?').get(Number(id));
+          if (!existing) return sendJSON(res, 404, { error: 'not found' });
+          db.prepare('DELETE FROM client_links WHERE id = ?').run(Number(id));
+          return sendJSON(res, 200, { ok: true, deleted: true });
+        }
         db.prepare('UPDATE client_links SET revoked = 1 WHERE id = ?').run(Number(id));
         return sendJSON(res, 200, { ok: true });
       }
