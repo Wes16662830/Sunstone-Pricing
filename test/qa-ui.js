@@ -203,6 +203,30 @@ function check(name, cond, detail) {
   await cp.waitForTimeout(600);
   const cMonthly = await cp.$eval('#r-monthly', (el) => el.innerText);
   check('client quote shows a price', /[1-9]/.test(cMonthly), cMonthly);
+  // client picks hardware + installation, then flips on international delivery
+  await cp.waitForSelector('#hardware-list input[data-group="hardware"]');
+  const hwOptCount = await cp.locator('#hardware-list input[data-group="hardware"]').count();
+  const instOptCount = await cp.locator('#install-list input[data-group="install"]').count();
+  check('client page offers hardware options', hwOptCount > 0, String(hwOptCount));
+  check('client page offers installation options', instOptCount > 0, String(instOptCount));
+  check('hardware summary hidden until something is picked',
+    (await cp.$eval('#r-hardware', (el) => el.innerText.trim())) === '');
+  await cp.locator('#hardware-list input[data-group="hardware"]').first().fill('4');
+  await cp.waitForTimeout(600);
+  const onceOff = await cp.$eval('#r-hardware', (el) => el.innerText);
+  check('once-off total appears after picking hardware', /Once-off/i.test(onceOff), onceOff.slice(0, 80));
+  const money = (s) => Number(String(s).replace(/[^0-9.]/g, ''));
+  const beforeIntl = money((await cp.$eval('#r-hardware', (el) => el.innerText)).split('\n').pop());
+  await cp.check('#in-intl');
+  await cp.waitForTimeout(600);
+  const intlTxt = await cp.$eval('#r-hardware', (el) => el.innerText);
+  const afterIntl = money(intlTxt.split('\n').pop());
+  check('international delivery adds a shipping line', /shipping/i.test(intlTxt), intlTxt.slice(0, 120));
+  check('international delivery raises the once-off total', afterIntl > beforeIntl, `${beforeIntl} -> ${afterIntl}`);
+  // the printable quote must carry hardware too
+  const docHtml = await cp.$eval('#quote-doc', (el) => el.innerHTML);
+  check('printable quote includes a hardware section', /Hardware &amp; Installation|Hardware & Installation/.test(docHtml));
+  check('printable quote includes the shipping line', /shipping/i.test(docHtml));
   // client page must not expose internal data
   const html = await cp.content();
   const leaked = ['marginalCost', 'targetGM', 'stepThreshold'].filter((k) => html.includes(k));

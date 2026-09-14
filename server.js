@@ -243,7 +243,14 @@ async function handleApi(req, res) {
           billingLabel: p.billing === 'perUser' ? 'per user' : p.billing === 'flat' ? 'flat / month' : 'per vehicle',
           unitPrice: P.listPrice(p), bundleEligible: p.bundleEligible, volumeEligible: p.volumeEligible,
         }));
-        return sendJSON(res, 200, { products, currency: { zarPerUnit: active.currency.zarPerUnit } });
+        // Hardware + installation options (and the international shipping rate)
+        // come from the engine, so Config additions appear here automatically.
+        const hw = P.clientHardwareOptions();
+        return sendJSON(res, 200, {
+          products, hardware: hw.hardware, install: hw.install,
+          intlShippingSurcharge: hw.intlShippingSurcharge,
+          currency: { zarPerUnit: active.currency.zarPerUnit },
+        });
       }
       if (parts[2] === 'quote' && req.method === 'POST') {
         const body = await readBody(req);
@@ -252,7 +259,13 @@ async function handleApi(req, res) {
         const selected = (body.selected && typeof body.selected === 'object') ? body.selected : {};
         loadActiveConfig();
         const sub = P.calcSubscription({ vehicles, users, selected });
-        return sendJSON(res, 200, clientQuoteProjection(sub, vehicles, users));
+        const out = clientQuoteProjection(sub, vehicles, users);
+        // Hardware is optional: absent when the client wants subscription only.
+        if (body.hardware && typeof body.hardware === 'object') {
+          out.hardware = P.clientHardwareProjection(
+            P.calcHardware(P.clientHardwareInput(body.hardware)));
+        }
+        return sendJSON(res, 200, out);
       }
       if (parts[2] === 'pricelist' && req.method === 'GET') {
         loadActiveConfig();

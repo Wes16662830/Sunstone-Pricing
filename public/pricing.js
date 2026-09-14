@@ -583,6 +583,81 @@
   }
 
   // ---------------------------------------------------------------------------
+  // CLIENT HARDWARE — selectable options, input mapping, margin-safe projection
+  //
+  // Lets the client quote page offer hardware + installation (and the
+  // international shipping surcharge) without shipping any pricing logic to the
+  // browser: the client sends quantities, calcHardware runs server-side, and
+  // only sell prices and totals come back.
+  // ---------------------------------------------------------------------------
+
+  // Rows calcHardware wires to fleet composition. The include flag for each is
+  // `<id>Include` and the quantity override key is the id itself.
+  const WIRED_HW_IDS = ['djHandset', 'smHandset', 'printer', 'vehicleGps', 'trailerGps', 'fuelKitSingle', 'fuelKitDual'];
+  const WIRED_INSTALL_IDS = ['gpsInstall', 'fuelKitSingleInst', 'fuelKitDualInst', 'trailerInstall'];
+
+  // The list of things a client can pick, derived by running calcHardware with
+  // every row forced on at qty 1. Deriving it (rather than hand-listing rows)
+  // means added catalog/installation items appear automatically and the ids can
+  // never drift from the ones calcHardware actually understands.
+  function clientHardwareOptions() {
+    const items = { qtyOverride: {}, installQtyOverride: {}, extra: {}, installSel: {} };
+    WIRED_HW_IDS.forEach((id) => { items[id + 'Include'] = true; items.qtyOverride[id] = 1; });
+    WIRED_INSTALL_IDS.forEach((id) => { items.installQtyOverride[id] = 1; });
+    Object.keys(activeConfig.hardwareCatalog || {}).forEach((k) => { items.extra[k] = { include: true, qty: 1 }; });
+    (activeConfig.installItems || []).forEach((ii) => { items.installSel[ii.key] = { include: true, qty: 1 }; });
+    const probe = calcHardware({ vehicles: 0, items });
+    return {
+      hardware: probe.rows.map((r) => ({ id: r.id, desc: r.desc, unitPrice: r.unit })),
+      install: probe.installRows.map((r) => ({ id: r.id, desc: r.desc, unitPrice: r.rate })),
+      intlShippingSurcharge: activeConfig.intlShippingSurcharge,
+    };
+  }
+
+  // Map a client selection { outsideSA, hardware:{id:qty}, install:{id:qty} }
+  // onto a calcHardware input. Fleet counts stay 0: on the client page every
+  // quantity is entered explicitly, so nothing is derived from fleet size.
+  function clientHardwareInput(sel) {
+    const s = (sel && typeof sel === 'object') ? sel : {};
+    const hw = (s.hardware && typeof s.hardware === 'object') ? s.hardware : {};
+    const inst = (s.install && typeof s.install === 'object') ? s.install : {};
+    const q = (o, id) => Math.max(0, Number(o[id]) || 0);
+    const items = { qtyOverride: {}, installQtyOverride: {}, extra: {}, installSel: {} };
+    WIRED_HW_IDS.forEach((id) => {
+      const n = q(hw, id);
+      items[id + 'Include'] = n > 0;
+      items.qtyOverride[id] = n;
+    });
+    WIRED_INSTALL_IDS.forEach((id) => { items.installQtyOverride[id] = q(inst, id); });
+    Object.keys(activeConfig.hardwareCatalog || {}).forEach((k) => {
+      const n = q(hw, 'cat:' + k);
+      items.extra[k] = { include: n > 0, qty: n };
+    });
+    (activeConfig.installItems || []).forEach((ii) => {
+      const n = q(inst, 'inst:' + ii.key);
+      items.installSel[ii.key] = { include: n > 0, qty: n };
+    });
+    return { vehicles: 0, singleTank: 0, dualTank: 0, trailerQty: 0, outsideSA: !!s.outsideSA, items };
+  }
+
+  // Whitelisted projection of a calcHardware result: sell prices and totals
+  // only — never marginal cost, markup or step cost.
+  function clientHardwareProjection(hw) {
+    const line = (r, unit) => ({ desc: r.desc, qty: r.qty, unitPrice: unit, total: r.subtotal });
+    return {
+      outsideSA: !!hw.outsideSA,
+      rows: hw.rows.filter((r) => r.subtotal > 0).map((r) => line(r, r.unit)),
+      install: hw.installRows.filter((r) => r.subtotal > 0).map((r) => line(r, r.rate)),
+      hardwareSubtotal: hw.hardwareSubtotal,
+      shippingSurcharge: hw.shippingSurcharge,
+      shippingRate: activeConfig.intlShippingSurcharge,
+      hardwareTotal: hw.hardwareTotal,
+      installSubtotal: hw.installSubtotal,
+      onceOffTotal: hw.grandTotal,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // FULL DEAL
   // ---------------------------------------------------------------------------
   function calcDeal(deal) {
@@ -627,5 +702,7 @@
     // calculators
     calcSubscription, calcHardware, calcImplementation, calcRental,
     calcInternalMargin, buildClientQuote, calcDeal,
+    // client-facing hardware (margin-safe)
+    clientHardwareOptions, clientHardwareInput, clientHardwareProjection,
   };
 });
