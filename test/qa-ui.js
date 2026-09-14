@@ -177,6 +177,93 @@ function check(name, cond, detail) {
   const subOrder = await p.$$eval('#sub-tbody tr td:nth-child(2)', (e) => e.map((x) => x.innerText.trim()));
   check('Subscription tab uses the configured product order', subOrder[0] === afterReload[0], `${subOrder[0]} vs ${afterReload[0]}`);
 
+  console.log('\n=== 10b. Proposal = the standard template ===');
+  await p.click('.tab[data-tab="subscription"]');
+  await p.waitForTimeout(200);
+  // clear every product so the document reads as the full generic suite
+  const boxes = p.locator('#sub-tbody input[type=checkbox]');
+  for (let i = 0; i < await boxes.count(); i++) {
+    if (await boxes.nth(i).isChecked()) await boxes.nth(i).uncheck();
+  }
+  await p.fill('#in-customer', 'Trade Kings (Zim Kings)');
+  await p.waitForTimeout(500);
+  await p.click('.tab[data-tab="proposal"]');
+  await p.waitForTimeout(600);
+  const doc = () => p.$eval('#proposal-doc', (el) => el.innerText);
+  let pd = await doc();
+  // the fixed boilerplate must be present verbatim
+  for (const phrase of [
+    'ControlHub',
+    'Integrated Logistics & Fleet Management Solution',
+    'The Sunstone Product Suite',
+    'The Control Hub Suite in a Day',
+    'Integration, Delivery and Support',
+    'Implementation Timeline',
+    'Price List',
+    'Commercial Notes',
+    'Conclusion',
+    'Execution Manager is supplied with Route Builder and is not separately licensed.',
+    'All hardware to be delivered outside of South Africa',
+    '+27 11 482 4768',
+    '43B Edward Rubenstein Drive',
+  ]) {
+    // innerText returns RENDERED text and some headings are uppercased in CSS,
+    // so compare case-insensitively.
+    check(`proposal contains standard copy: "${phrase.slice(0, 42)}"`,
+      pd.toLowerCase().includes(phrase.toLowerCase()));
+  }
+  check('proposal names the customer on the cover', /Submitted to:\s*Trade Kings \(Zim Kings\)/.test(pd));
+  const mentions = (pd.match(/Trade Kings \(Zim Kings\)/g) || []).length;
+  check('customer name is woven through the body, not just the cover', mentions >= 8, `${mentions} mentions`);
+  check('no unreplaced client placeholder remains', !pd.includes('{CLIENT}') && !pd.includes('{INTL}'));
+  check('full suite shown when nothing is selected',
+    ['1. Route Builder', '2. Digital Journey', '3. Fleet Pro', '4. Stock Master', '5. Yard Manager']
+      .every((s) => pd.includes(s)), pd.slice(pd.indexOf('CONTENTS'), pd.indexOf('CONTENTS') + 220));
+
+  // the price list must come from config, not from hardcoded copy
+  const cfgPrices = await p.evaluate(() => {
+    const c = P.getConfig();
+    return {
+      // Format with the app's own currency helper: Node and Chromium disagree
+      // on en-ZA grouping, so formatting in the test would compare apples to pears.
+      products: c.products.map((x) => ({ name: x.quoteLabel || x.name, price: cur(P.listPrice(x)) })),
+      hardware: P.clientHardwareOptions().hardware.map((h) => h.desc),
+      install: P.clientHardwareOptions().install.map((h) => h.desc),
+      intl: P.clientHardwareOptions().intlShippingSurcharge,
+    };
+  });
+  check('every configured product is priced in the proposal',
+    cfgPrices.products.every((x) => pd.includes(x.name)), cfgPrices.products.map((x) => x.name).join(','));
+  check('proposal prices match the engine list price',
+    cfgPrices.products.every((x) => pd.includes(x.price)),
+    cfgPrices.products.map((x) => x.price).join(','));
+  check('every catalogue hardware item is listed', cfgPrices.hardware.every((d) => pd.includes(d)));
+  check('every installation item is listed', cfgPrices.install.every((d) => pd.includes(d)));
+  check('intl surcharge rate comes from config', pd.includes(`${cfgPrices.intl * 100}% international shipping`));
+  check('open-ended volume tier reads as "+"', /2000\+ vehicles/.test(pd));
+  check('whole percentages have no trailing decimal', !/\b\d+\.0%/.test(pd), (pd.match(/\b\d+\.0%/g) || []).join(','));
+
+  // a proposal is client-facing: it must carry no cost or margin data
+  const propHtml = await p.$eval('#proposal-doc', (el) => el.innerHTML);
+  const propLeak = ['marginalCost', 'targetGM', 'stepThreshold', 'stepCost', 'grossMargin', 'hardwareMarkup']
+    .filter((k) => propHtml.includes(k));
+  check('proposal document leaks no cost/margin identifiers', propLeak.length === 0, propLeak.join(','));
+
+  // selecting products narrows the document to those products
+  await p.click('.tab[data-tab="subscription"]');
+  await p.waitForTimeout(200);
+  const rbRow = p.locator('#sub-tbody tr').filter({ hasText: 'Route Builder' }).first();
+  await rbRow.locator('input[type=checkbox]').check();
+  await p.waitForTimeout(600);
+  await p.click('.tab[data-tab="proposal"]');
+  await p.waitForTimeout(600);
+  pd = await doc();
+  check('selected product keeps its section', pd.includes('1. Route Builder'));
+  check('unselected products drop out', !pd.includes('Stock Master mobile application') && !/\d\.\s*Yard Manager/.test(pd));
+  check('price list still lists all products (it is a price list)',
+    cfgPrices.products.every((x) => pd.includes(x.name)));
+  check('customer name still interpolated after narrowing', pd.includes('Trade Kings (Zim Kings)'));
+
   console.log('\n=== 11. Client links UI lifecycle ===');
   await p.click('.tab[data-tab="config"]');
   await p.waitForSelector('#link-create');

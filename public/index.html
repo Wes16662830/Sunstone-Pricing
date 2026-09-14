@@ -196,12 +196,10 @@
 
     <!-- PROPOSAL (client-facing narrative + commercials; built from the client-safe quote) -->
     <section class="panel" data-panel="proposal">
-      <div class="banner banner-info">Generate a client-ready proposal from the current deal. Narrative sections are pre-written from Sunstone’s standard copy and the products you selected — edit any of them below. Commercials are pulled from the client-safe quote (no cost or margin data).</div>
+      <div class="banner banner-info">Sunstone’s standard proposal document, generated from the current deal. The wording is fixed — only the <strong>customer name</strong> and the <strong>products and their pricing</strong> change. Set the customer at the top of the page; tick products on the Subscription tab to narrow the document (with nothing ticked it reads as the full generic suite proposal). All figures come from the pricing config; no cost or margin data appears.</div>
       <div class="card no-print proposal-controls">
         <div class="pc-row">
           <button id="prop-print" class="btn btn-primary">🖨 Print / Save PDF</button>
-          <button id="prop-regen" class="btn">↺ Regenerate from deal</button>
-          <span class="note">Edits are kept with the quote when you save it. “Regenerate” discards edits and rebuilds from the current products &amp; pricing.</span>
         </div>
         <div id="prop-fields"></div>
       </div>

@@ -338,31 +338,58 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
   .quote-doc { padding: 0; border-radius: 0; }
   .proposal-doc h3 { page-break-after: avoid; }
   .proposal-doc ul, .proposal-doc table { page-break-inside: avoid; }
+  /* Each .prop-page is one page of the standard document. On screen they are
+     separated by a rule; on paper they start a new sheet, and the contact
+     block sits at the foot of each one as it does in the printed original. */
+  .proposal-doc .prop-page { page-break-before: always; border-top: none; margin-top: 0; padding-top: 0; }
+  .proposal-doc .prop-cover { min-height: 60vh; }
+  .proposal-doc .prop-h2 { page-break-after: avoid; }
+  .proposal-doc .prop-caphdr { page-break-after: avoid; }
+  .proposal-doc .prop-footer { color: #999; }
 }
 
 /* ===== Proposal ========================================================== */
 .proposal-controls { display: block; }
 .proposal-controls .pc-row { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s3); }
-.prop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
-.prop-field { display: block; margin-bottom: var(--s3); }
-.prop-field > span { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 4px; font-weight: 500; }
-.prop-field textarea {
-  width: 100%; font: inherit; font-size: 13px; line-height: 1.5; padding: 9px 11px;
-  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--panel-2);
-  color: var(--text); resize: vertical; transition: border-color .12s, box-shadow .12s;
-}
-.prop-field textarea:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
-.prop-incs { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s4); margin-top: var(--s2); }
-.prop-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+/* Proposal control strip — the document is a fixed template, so this shows
+   only the two things that vary (customer, products) plus the currency. */
+.prop-state { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); }
+.prop-state > div { display: flex; flex-direction: column; gap: 2px; }
+.prop-state span { font-size: 11px; color: var(--text-dim); letter-spacing: .3px; text-transform: uppercase; }
+.prop-state strong { font-size: 13px; }
+
+/* Proposal document — mirrors the printed standard proposal. Each .prop-page
+   is one page of that document and starts a new sheet when printed. */
+.proposal-doc .prop-page { padding-top: var(--s5); border-top: 1px solid #e8e8e8; margin-top: var(--s5); }
 .proposal-doc .prop-cover { border-bottom: 2px solid #e2e2e2; padding-bottom: var(--s4); margin-bottom: var(--s2); }
 .proposal-doc .prop-kicker { font-size: 11px; letter-spacing: 3px; color: #b07a1e; font-weight: 700; }
-.proposal-doc .prop-cover h1 { font-size: 23px; margin: var(--s2) 0 var(--s4); letter-spacing: -.2px; line-height: 1.25; }
+.proposal-doc .prop-title { font-size: 34px; margin: var(--s2) 0 2px; letter-spacing: -.5px; line-height: 1.1; }
+.proposal-doc .prop-subtitle { font-size: 15px; color: #444; }
+.proposal-doc .prop-suite { font-size: 13px; color: #888; margin: 2px 0 var(--s4); }
 .proposal-doc .prop-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 30px; font-size: 13px; }
 .proposal-doc .prop-meta span { color: #888; }
 .proposal-doc p { line-height: 1.65; margin: 9px 0; }
+.proposal-doc .prop-h2 { font-size: 18px; margin: 0 0 var(--s3); letter-spacing: -.2px; }
+.proposal-doc .prop-h { font-size: 15px; margin: var(--s5) 0 2px; }
+.proposal-doc .prop-h:first-child { margin-top: 0; }
+.proposal-doc .prop-sub { font-size: 12px; color: #888; margin: 0 0 2px; }
 .proposal-doc .prop-tag { color: #666; font-size: 12px; font-style: italic; margin: 2px 0 9px; }
 .proposal-doc .prop-caphdr { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: #555; margin: var(--s3) 0 var(--s1); }
+.proposal-doc .prop-note { font-size: 11px; color: #777; line-height: 1.5; }
 .proposal-doc ul.prop-caps { margin: var(--s1) 0 var(--s3) 18px; }
 .proposal-doc ul.prop-caps li { margin-bottom: 4px; line-height: 1.5; }
-.proposal-doc .prop-signoff { margin-top: var(--s5); padding-top: var(--s3); border-top: 1px solid #e2e2e2; font-weight: 600; }
-@media (max-width: 700px) { .prop-grid, .proposal-doc .prop-meta { grid-template-columns: 1fr; } }
+.proposal-doc ul.prop-toc { margin: 0 0 0 18px; columns: 2; column-gap: 30px; }
+.proposal-doc ul.prop-toc li { margin-bottom: 5px; line-height: 1.5; break-inside: avoid; }
+.proposal-doc table.prop-table { width: 100%; border-collapse: collapse; font-size: 12px; margin: var(--s2) 0 var(--s3); }
+.proposal-doc table.prop-table th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+  color: #777; border-bottom: 1.5px solid #ccc; padding: 6px 8px 5px; }
+.proposal-doc table.prop-table td { padding: 7px 8px; border-bottom: 1px solid #eee; vertical-align: top; line-height: 1.45; }
+.proposal-doc table.prop-table td:last-child, .proposal-doc table.prop-table th:last-child { text-align: right; }
+.proposal-doc table.prop-table th:first-child, .proposal-doc table.prop-table td:first-child { padding-left: 0; }
+/* Contact block repeated at the foot of every page of the standard document. */
+.proposal-doc .prop-footer { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: var(--s5);
+  padding-top: var(--s2); border-top: 1px solid #eee; font-size: 10px; color: #999; }
+@media (max-width: 700px) {
+  .proposal-doc .prop-meta { grid-template-columns: 1fr; }
+  .proposal-doc ul.prop-toc { columns: 1; }
+}
