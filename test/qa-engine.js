@@ -170,6 +170,63 @@ P.setConfig(P.getDefaultConfig());
   check('internalMargin DOES contain margin data (sanity)', JSON.stringify(d.internalMargin).includes('grossMargin'));
 }
 
+console.log('\n=== H2. Client HARDWARE options / input / projection ===');
+P.setConfig(P.getDefaultConfig());
+{
+  const opt = P.clientHardwareOptions();
+  const ids = opt.hardware.map((h) => h.id);
+  check('options expose the wired hardware rows', ['djHandset', 'smHandset', 'printer', 'vehicleGps', 'trailerGps', 'fuelKitSingle', 'fuelKitDual'].every((i) => ids.includes(i)), ids.join(','));
+  check('options expose every extra catalog item', ids.includes('cat:streamax3cam'));
+  check('option rows carry a positive unit price', opt.hardware.every((h) => h.unitPrice > 0));
+  const iids = opt.install.map((h) => h.id);
+  check('options expose the wired install rows', ['gpsInstall', 'fuelKitSingleInst', 'fuelKitDualInst', 'trailerInstall'].every((i) => iids.includes(i)), iids.join(','));
+  check('options expose configured install items', iids.includes('inst:cameraInstall'));
+  check('options expose the intl shipping rate', opt.intlShippingSurcharge === 0.20, String(opt.intlShippingSurcharge));
+
+  // A newly added catalog item must surface automatically (config-driven, not hardcoded).
+  const cfg = P.getDefaultConfig();
+  cfg.hardwareCatalog.qaWidget = { sku: 'QA Widget', cost: 1000 };
+  P.setConfig(cfg);
+  check('catalog item added in Config appears as an option',
+    P.clientHardwareOptions().hardware.some((h) => h.id === 'cat:qaWidget'));
+  P.setConfig(P.getDefaultConfig());
+
+  const proj = (sel) => P.clientHardwareProjection(P.calcHardware(P.clientHardwareInput(sel)));
+  const sel = { outsideSA: false, hardware: { vehicleGps: 10, 'cat:streamax3cam': 2 }, install: { gpsInstall: 10 } };
+  const local = proj(sel);
+  const hwExpect = 10 * 798.75 + 2 * 10890;
+  check('hardware subtotal = qty x unit sell', local.hardwareSubtotal === hwExpect, `${local.hardwareSubtotal} vs ${hwExpect}`);
+  check('install subtotal = qty x rate', local.installSubtotal === 8000, String(local.installSubtotal));
+  check('once-off total = hardware + install', local.onceOffTotal === hwExpect + 8000, String(local.onceOffTotal));
+  check('no shipping surcharge inside SA', local.shippingSurcharge === 0);
+  check('only selected rows are returned', local.rows.length === 2 && local.install.length === 1);
+
+  const intl = proj({ ...sel, outsideSA: true });
+  check('intl surcharge = 20% of hardware subtotal', Math.abs(intl.shippingSurcharge - hwExpect * 0.20) < 1e-9, String(intl.shippingSurcharge));
+  check('intl surcharge does NOT apply to labour', intl.installSubtotal === local.installSubtotal);
+  check('intl once-off = hardware x1.2 + install', Math.abs(intl.onceOffTotal - (hwExpect * 1.2 + 8000)) < 1e-9, String(intl.onceOffTotal));
+  check('projection reports the rate it applied', intl.shippingRate === 0.20 && intl.outsideSA === true);
+
+  // zero / absent / hostile selections must not throw or invent charges
+  check('empty selection = zero once-off', proj({}).onceOffTotal === 0);
+  check('zero quantities = no rows', proj({ hardware: { vehicleGps: 0 } }).rows.length === 0);
+  check('negative quantity clamped to zero', proj({ hardware: { vehicleGps: -5 } }).onceOffTotal === 0);
+  check('non-numeric quantity ignored', proj({ hardware: { vehicleGps: 'abc' } }).onceOffTotal === 0);
+  check('unknown row id ignored', proj({ hardware: { nonsense: 99 } }).onceOffTotal === 0);
+  check('null selection does not throw', proj(null).onceOffTotal === 0);
+  check('outsideSA with nothing selected adds nothing', proj({ outsideSA: true }).shippingSurcharge === 0);
+
+  // quantities are explicit: fleet size must not leak into a client hardware quote
+  check('fleet size does not drive client hardware qty',
+    proj({ hardware: { vehicleGps: 3 } }).rows[0].qty === 3);
+
+  const banned = ['marginalCost', 'targetGM', 'stepThreshold', 'stepCost', 'contribution', 'grossMargin', '"cost"', 'markup'];
+  const leaked = banned.filter((k) => JSON.stringify(intl).includes(k));
+  check('hardware projection leaks no cost/margin keys', leaked.length === 0, leaked.join(','));
+  const optLeaked = banned.filter((k) => JSON.stringify(P.clientHardwareOptions()).includes(k));
+  check('hardware options leak no cost/margin keys', optLeaked.length === 0, optLeaked.join(','));
+}
+
 console.log('\n=== I. Cross-backend projection parity (server.js vs functions/_shared.js) ===');
 {
   // Compare the two hand-written clientPriceList implementations field-by-field.

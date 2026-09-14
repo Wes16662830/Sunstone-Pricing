@@ -16,5 +16,11 @@ export async function onRequestPost({ request, env }) {
 
   await applyActiveConfig(env, Pricing);
   const sub = Pricing.calcSubscription({ vehicles, users, selected });
-  return json(clientQuoteProjection(sub, vehicles, users));
+  const out = clientQuoteProjection(sub, vehicles, users);
+  // Hardware is optional: absent when the client only wants subscription pricing.
+  if (body.hardware && typeof body.hardware === 'object') {
+    out.hardware = Pricing.clientHardwareProjection(
+      Pricing.calcHardware(Pricing.clientHardwareInput(body.hardware)));
+  }
+  return json(out);
 }

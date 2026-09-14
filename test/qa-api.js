@@ -143,6 +143,61 @@ function cookieFrom(res, name) {
   check('client quote monthly matches engine', Math.abs(r.json.monthly - expected.totalMonthly) < 0.01, `${r.json.monthly} vs ${expected.totalMonthly}`);
   check('client quote annual matches engine', Math.abs(r.json.annual - expected.totalAnnual) < 0.01, `${r.json.annual} vs ${expected.totalAnnual}`);
 
+  // --- hardware + international shipping over the API ---
+  r = await req('/api/client/catalog', { cookie: clientCookie });
+  const cat = r.json || {};
+  check('catalog exposes hardware options', Array.isArray(cat.hardware) && cat.hardware.length > 0, JSON.stringify(cat.hardware || []).slice(0, 80));
+  check('catalog exposes install options', Array.isArray(cat.install) && cat.install.length > 0);
+  check('catalog exposes the intl shipping rate', cat.intlShippingSurcharge === 0.20, String(cat.intlShippingSurcharge));
+  check('catalog hardware options carry id/desc/unitPrice',
+    cat.hardware.every((h) => h.id && h.desc && typeof h.unitPrice === 'number'));
+  check('catalog includes extra catalog items, not just wired rows',
+    cat.hardware.some((h) => /^cat:/.test(h.id)), cat.hardware.map((h) => h.id).join(','));
+
+  const hwSel = { outsideSA: false, hardware: { vehicleGps: 10, 'cat:streamax3cam': 2 }, install: { gpsInstall: 10 } };
+  const hwExpected = P.clientHardwareProjection(P.calcHardware(P.clientHardwareInput(hwSel)));
+  r = await req('/api/client/quote', {
+    method: 'POST', cookie: clientCookie,
+    body: { vehicles: 20, users: 0, selected: { tracking: true }, hardware: hwSel },
+  });
+  check('quote returns a hardware block', !!(r.json && r.json.hardware), JSON.stringify(r.json).slice(0, 100));
+  check('API hardware total matches engine',
+    Math.abs(r.json.hardware.onceOffTotal - hwExpected.onceOffTotal) < 0.01,
+    `${r.json.hardware.onceOffTotal} vs ${hwExpected.onceOffTotal}`);
+  check('subscription still computed alongside hardware', Number.isFinite(r.json.monthly) && r.json.monthly > 0);
+  const hwLeak = LEAK.filter((k) => JSON.stringify(r.json.hardware).includes(k.replace(/"/g, '')));
+  check('hardware block leaks no cost/margin fields', hwLeak.length === 0, 'leaked: ' + hwLeak.join(','));
+
+  r = await req('/api/client/quote', {
+    method: 'POST', cookie: clientCookie,
+    body: { vehicles: 20, users: 0, selected: { tracking: true }, hardware: { ...hwSel, outsideSA: true } },
+  });
+  const ih = r.json.hardware;
+  check('API applies intl shipping surcharge',
+    Math.abs(ih.shippingSurcharge - hwExpected.hardwareSubtotal * 0.20) < 0.01, String(ih.shippingSurcharge));
+  check('API intl surcharge excludes installation labour',
+    ih.installSubtotal === hwExpected.installSubtotal, `${ih.installSubtotal} vs ${hwExpected.installSubtotal}`);
+  check('API intl once-off = hardware x1.2 + install',
+    Math.abs(ih.onceOffTotal - (hwExpected.hardwareSubtotal * 1.2 + hwExpected.installSubtotal)) < 0.01, String(ih.onceOffTotal));
+
+  r = await req('/api/client/quote', { method: 'POST', cookie: clientCookie, body: { vehicles: 20, selected: { tracking: true } } });
+  check('hardware omitted -> no hardware block (subscription-only unchanged)', r.status === 200 && !r.json.hardware);
+
+  for (const [label, hardware] of [
+    ['null hardware', null],
+    ['hardware as string', 'lots'],
+    ['negative qty', { hardware: { vehicleGps: -9 } }],
+    ['string qty', { hardware: { vehicleGps: 'ten' } }],
+    ['unknown row id', { hardware: { bogusRow: 5 } }],
+    ['huge qty', { hardware: { vehicleGps: 1e9 } }],
+    ['install only', { install: { gpsInstall: 4 } }],
+  ]) {
+    r = await req('/api/client/quote', { method: 'POST', cookie: clientCookie, body: { vehicles: 10, selected: { tracking: true }, hardware } });
+    const h = r.json && r.json.hardware;
+    const ok = r.status === 200 && (!h || (Number.isFinite(h.onceOffTotal) && h.onceOffTotal >= 0));
+    check(`client quote handles ${label}`, ok, `status ${r.status} ${JSON.stringify(h || {}).slice(0, 70)}`);
+  }
+
   const badInputs = [
     ['negative vehicles', { vehicles: -50, users: 0, selected: { tracking: true } }],
     ['string vehicles', { vehicles: 'abc', users: 0, selected: { tracking: true } }],

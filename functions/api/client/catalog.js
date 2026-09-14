@@ -21,5 +21,14 @@ export async function onRequestGet({ env }) {
     bundleEligible: p.bundleEligible,
     volumeEligible: p.volumeEligible,
   }));
-  return json({ products, currency: { zarPerUnit: active.currency.zarPerUnit } });
+  // Hardware + installation options (and the international shipping rate) come
+  // from the engine, so anything added in Config shows up here automatically.
+  const hw = Pricing.clientHardwareOptions();
+  return json({
+    products,
+    hardware: hw.hardware,
+    install: hw.install,
+    intlShippingSurcharge: hw.intlShippingSurcharge,
+    currency: { zarPerUnit: active.currency.zarPerUnit },
+  });
 }

@@ -67,15 +67,26 @@ There is a separate, self-service **client pricing page** at `/quote` you can
 share with a customer. It is deliberately minimal: the client enters their fleet
 size, ticks the products they want, picks a currency, and sees indicative
 monthly / annual / per-vehicle subscription pricing (bundle and volume discounts
-applied automatically), plus a printable quote. Hardware and implementation are
-shown as "quoted separately".
+applied automatically), plus a printable quote.
+
+Below that they can add **hardware and installation** for a once-off total.
+Quantities are entered per item — nothing is derived from fleet size — so a
+hardware-only quote works too. Ticking **"Delivery outside South Africa"** adds
+the international shipping & customs surcharge (`intlShippingSurcharge`, 20% by
+default) to the hardware subtotal; as in the workbook, labour is never
+surcharged. The list of items comes from the engine
+(`clientHardwareOptions()`), so anything added to the hardware catalog or
+installation items in Config appears automatically. Implementation stays
+internal-only and is still "quoted separately".
 
 **Why it's safe to share (margin-safe by construction):** the client page ships
 **no pricing engine and no cost constants**. It calls two endpoints —
-`GET /api/client/catalog` (product names, billing basis, and the per-unit *list*
-price only) and `POST /api/client/quote` (runs the shared engine server-side and
-returns only client-facing prices via `clientQuoteProjection`). Marginal cost,
-target GM, and step cost are computed away on the server and never sent. The
+`GET /api/client/catalog` (product names, billing basis, the per-unit *list*
+price, and the selectable hardware/installation items with their sell prices)
+and `POST /api/client/quote` (runs the shared engine server-side and returns
+only client-facing prices via `clientQuoteProjection` and
+`clientHardwareProjection`). Marginal cost, target GM, hardware markup and step
+cost are computed away on the server and never sent. The
 client session cookie (`sps_client`) unlocks **only** `/quote`, its assets, and
 `/api/client/*`; it cannot reach `/`, `pricing.js`, `/api/config`, or any internal
 route (verified: those return 302/401 for a client-only session).
