@@ -72,11 +72,14 @@ next:**
 1. **the customer name** — written as the `{CLIENT}` token in the template and
    substituted wherever it appears (the cover, the executive summary, the
    product sections, the security and commercial notes, the conclusion);
-2. **the products and their pricing** — product sections are included for the
-   products ticked on the Subscription tab, renumbered `1..N`; with nothing
-   ticked the document reads as the full generic suite proposal. Every figure in
-   the Price List comes from the live pricing config through the same
-   client-safe helpers the client pages use.
+2. **the products and their pricing in the Price List** — every figure there
+   comes from the live pricing config through the same client-safe helpers the
+   client pages use, so an item added in Config appears automatically.
+
+The narrative is **not** tailored to the products ticked on a deal. This is the
+*generic* suite proposal: it presents the whole suite every time, exactly as the
+document the team sends does. What the client actually buys is settled by the
+Price List and the quote, not by cutting sections out of the narrative.
 
 There is deliberately **no narrative editing** in the tab: the wording is the
 standard document. If the standard document changes, change `proposal.js` — do
