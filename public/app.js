@@ -439,10 +439,11 @@ function renderQuote() {
 }
 
 // --- PROPOSAL ---------------------------------------------------------------
-// Renders Sunstone's STANDARD proposal document (proposal.js) verbatim. Only
-// two things vary between one generated proposal and the next: the customer
-// name, and the products included with their pricing. Nothing here invents
-// copy — if the standard document changes, change proposal.js.
+// Renders Sunstone's STANDARD proposal document (proposal.js) verbatim. It is
+// the GENERIC suite proposal: every product section is always present, exactly
+// as in the document the team sends. Only two things vary — the customer name,
+// and the products and pricing in the Price List. Nothing here invents copy —
+// if the standard document changes, change proposal.js.
 //
 // Every money figure comes from the live pricing config through the engine's
 // client-safe helpers, so no cost or margin data can reach the page.
@@ -465,23 +466,6 @@ function propPct(n) {
   return (Math.round(v * 10) / 10) + '%';
 }
 
-// The config product keys selected on this deal. With nothing selected the
-// document is the full generic suite proposal, exactly as the standard
-// template reads.
-function proposalKeys() {
-  const cfg = P.getConfig();
-  const keys = (cfg.products || []).filter((p) => deal.selected && deal.selected[p.key]).map((p) => p.key);
-  return { set: new Set(keys), any: keys.length > 0 };
-}
-
-// A template row/section is included when it names no products at all (it is
-// unconditional), or when any product it names is selected.
-function proposalIncludes(keys, sel) {
-  if (!keys || !keys.length) return true;
-  if (!sel.any) return true;
-  return keys.some((k) => sel.set.has(k));
-}
-
 function renderProposal() {
   renderProposalDoc();
   renderProposalFields();
@@ -493,7 +477,6 @@ function renderProposalDoc() {
   const host = document.getElementById('proposal-doc');
   if (!host || !T) return;
   const client = proposalClient();
-  const sel = proposalKeys();
   const t = (s) => escapeHtml(T.withClient(s, client));
   const paras = (arr) => arr.map((s) => `<p>${t(s)}</p>`).join('');
   const bullets = (arr) => `<ul class="prop-caps">${arr.map((s) => `<li>${t(s)}</li>`).join('')}</ul>`;
@@ -502,19 +485,21 @@ function renderProposalDoc() {
       <thead><tr>${head.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
       <tbody>${rows.map((cells) => `<tr>${cells.map((c) => `<td>${t(c)}</td>`).join('')}</tr>`).join('')}</tbody>
     </table>`;
-  const keep = (rows) => rows.filter((r) => proposalIncludes(r.keys, sel)).map((r) => r.cells);
 
-  // --- product narrative sections, renumbered 1..N ---------------------------
-  const sections = T.SECTIONS.filter((s) => proposalIncludes(s.keys, sel));
+  // --- product narrative sections -------------------------------------------
+  // The generic proposal presents the whole suite, so every section is here
+  // every time. What the client buys is settled by the Price List and the
+  // quote, not by cutting sections out of the narrative.
+  const sections = T.SECTIONS;
   const sectionHtml = sections.map((s, i) => {
-    const blocks = s.blocks.filter((b) => proposalIncludes(b.keys, sel)).map((b) => `
+    const blocks = s.blocks.map((b) => `
       <p class="prop-caphdr">${t(b.heading)}</p>
       ${b.intro ? `<p>${t(b.intro)}</p>` : ''}
       ${b.bullets ? bullets(b.bullets) : ''}
       ${b.footnote ? `<p class="prop-note">${t(b.footnote)}</p>` : ''}`).join('');
     const mt = s.moduleTable;
-    const modules = mt && keep(mt.rows).length ? `
-      ${table(mt.head, keep(mt.rows))}
+    const modules = mt ? `
+      ${table(mt.head, mt.rows)}
       <p class="prop-note">${t(mt.footnote)}</p>` : '';
     return `
       <h3 class="prop-h">${i + 1}. ${t(s.title)}</h3>
@@ -641,7 +626,7 @@ function renderProposalDoc() {
     <div class="prop-page">
       <h2 class="prop-h2">Executive Summary</h2>
       ${paras(T.EXEC_SUMMARY.paras)}
-      ${table(T.EXEC_SUMMARY.head, keep(T.EXEC_SUMMARY.rows))}
+      ${table(T.EXEC_SUMMARY.head, T.EXEC_SUMMARY.rows)}
       <p class="prop-note">${t(T.EXEC_SUMMARY.footnote)}</p>
       ${footer}
     </div>
@@ -649,7 +634,7 @@ function renderProposalDoc() {
     <div class="prop-page">
       <h2 class="prop-h2">${t(T.SUITE_IN_A_DAY.title)}</h2>
       <p>${t(T.SUITE_IN_A_DAY.intro)}</p>
-      ${table(T.SUITE_IN_A_DAY.head, keep(T.SUITE_IN_A_DAY.rows))}
+      ${table(T.SUITE_IN_A_DAY.head, T.SUITE_IN_A_DAY.rows)}
       <p class="prop-note">${t(T.SUITE_IN_A_DAY.footnote)}</p>
       ${footer}
     </div>
@@ -663,7 +648,7 @@ function renderProposalDoc() {
       <h2 class="prop-h2">${t(T.INTEGRATION.title)}</h2>
       <p class="prop-caphdr">${t(T.INTEGRATION.heading)}</p>
       <p>${t(T.INTEGRATION.intro)}</p>
-      ${table(T.INTEGRATION.head, keep(T.INTEGRATION.rows))}
+      ${table(T.INTEGRATION.head, T.INTEGRATION.rows)}
       <p class="prop-caphdr">${t(T.INTEGRATION.security.heading)}</p>
       ${bullets(T.INTEGRATION.security.bullets)}
       ${footer}
@@ -704,13 +689,11 @@ function proposalDateLabel() {
 function renderProposalFields() {
   const el = document.getElementById('prop-fields');
   if (!el) return;
-  const sel = proposalKeys();
-  const names = (P.getConfig().products || []).filter((p) => sel.set.has(p.key))
-    .map((p) => p.quoteLabel || p.name);
+  const products = (P.getConfig().products || []).map((p) => p.quoteLabel || p.name);
   el.innerHTML = `
     <div class="prop-state">
       <div><span>Customer</span><strong>${escapeHtml(proposalClient())}</strong></div>
-      <div><span>Products</span><strong>${names.length ? escapeHtml(names.join(', ')) : 'Full suite (nothing selected)'}</strong></div>
+      <div><span>Priced products</span><strong>${products.length ? escapeHtml(products.join(', ')) : '—'}</strong></div>
       <div><span>Currency</span><strong>${escapeHtml(displayCurrency)}</strong></div>
     </div>`;
 }

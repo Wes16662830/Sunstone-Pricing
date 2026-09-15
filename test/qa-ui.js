@@ -216,9 +216,15 @@ function check(name, cond, detail) {
   const mentions = (pd.match(/Trade Kings \(Zim Kings\)/g) || []).length;
   check('customer name is woven through the body, not just the cover', mentions >= 8, `${mentions} mentions`);
   check('no unreplaced client placeholder remains', !pd.includes('{CLIENT}') && !pd.includes('{INTL}'));
+  const FULL_SUITE = ['1. Route Builder', '2. Digital Journey', '3. Fleet Pro', '4. Stock Master', '5. Yard Manager'];
   check('full suite shown when nothing is selected',
-    ['1. Route Builder', '2. Digital Journey', '3. Fleet Pro', '4. Stock Master', '5. Yard Manager']
-      .every((s) => pd.includes(s)), pd.slice(pd.indexOf('CONTENTS'), pd.indexOf('CONTENTS') + 220));
+    FULL_SUITE.every((s) => pd.includes(s)), pd.slice(pd.indexOf('CONTENTS'), pd.indexOf('CONTENTS') + 220));
+  // Every Fleet Pro module is described, not just the ones on the deal.
+  // (Module headings are uppercased in CSS, so compare case-insensitively.)
+  const pdLower = pd.toLowerCase();
+  check('all three Fleet Pro modules described',
+    ['Module 1 — Track & Trace', 'Module 2 — Fuel Control', 'Module 3 — Fleet View']
+      .every((s) => pdLower.includes(s.toLowerCase())));
 
   // the price list must come from config, not from hardcoded copy
   const cfgPrices = await p.evaluate(() => {
@@ -249,7 +255,11 @@ function check(name, cond, detail) {
     .filter((k) => propHtml.includes(k));
   check('proposal document leaks no cost/margin identifiers', propLeak.length === 0, propLeak.join(','));
 
-  // selecting products narrows the document to those products
+  // REGRESSION: this is the GENERIC proposal. Ticking products on the deal
+  // must NOT cut sections out of it — an earlier version narrowed the
+  // narrative to the selected products, which is not the document the team
+  // sends. Only the customer and the Price List may vary.
+  const docBeforeSelect = pd;
   await p.click('.tab[data-tab="subscription"]');
   await p.waitForTimeout(200);
   const rbRow = p.locator('#sub-tbody tr').filter({ hasText: 'Route Builder' }).first();
@@ -258,11 +268,12 @@ function check(name, cond, detail) {
   await p.click('.tab[data-tab="proposal"]');
   await p.waitForTimeout(600);
   pd = await doc();
-  check('selected product keeps its section', pd.includes('1. Route Builder'));
-  check('unselected products drop out', !pd.includes('Stock Master mobile application') && !/\d\.\s*Yard Manager/.test(pd));
-  check('price list still lists all products (it is a price list)',
-    cfgPrices.products.every((x) => pd.includes(x.name)));
-  check('customer name still interpolated after narrowing', pd.includes('Trade Kings (Zim Kings)'));
+  check('selecting a product does NOT drop any section', FULL_SUITE.every((s) => pd.includes(s)),
+    FULL_SUITE.filter((s) => !pd.includes(s)).join(',') || 'all present');
+  check('document is unchanged by product selection', pd === docBeforeSelect,
+    pd.length === docBeforeSelect.length ? 'same length, differing text' : `${docBeforeSelect.length} -> ${pd.length} chars`);
+  check('price list still lists all products', cfgPrices.products.every((x) => pd.includes(x.name)));
+  check('customer name still interpolated', pd.includes('Trade Kings (Zim Kings)'));
 
   console.log('\n=== 11. Client links UI lifecycle ===');
   await p.click('.tab[data-tab="config"]');

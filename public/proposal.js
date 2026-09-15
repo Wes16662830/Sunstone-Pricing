@@ -7,9 +7,12 @@
  *
  * ONLY TWO THINGS VARY between one generated proposal and the next:
  *   1. the customer name — written as the {CLIENT} token wherever it appears;
- *   2. the products included and their pricing — product sections are shown
- *      for the products selected on the deal, and every figure in the Price
- *      List comes from the live pricing config.
+ *   2. the products and their pricing in the Price List — every figure there
+ *      comes from the live pricing config.
+ *
+ * The narrative is NOT tailored to the products ticked on a deal. This is the
+ * generic suite proposal: it presents the whole suite every time, exactly as
+ * the document the team sends out does.
  *
  * Everything else is fixed boilerplate. If the standard document changes,
  * change it HERE — do not special-case copy in app.js.
@@ -44,14 +47,13 @@
       'Sunstone Logistic Systems (SLS) is a logistics technology company with over a decade of delivery across 18 countries in sub-Saharan Africa and the Middle East, serving global FMCG brands, beverage distributors, cold chain operators and third-party logistics providers.',
       'This proposal presents the Sunstone product suite — five products covering the complete logistics and fleet lifecycle. Each delivers standalone value; all are natively API-connected through the Sunstone Control Hub. {CLIENT} can start with the products that address the most pressing cost or risk and expand across the suite without changing platform.',
     ],
-    // Rows are filtered to the products actually proposed (see `keys`).
     head: ['Product', 'What It Does', 'Outcome'],
     rows: [
-      { keys: ['routeBuilder'], cells: ['Route Builder (incl. Execution Manager)', 'AI route planning with live control tower', 'Up to 30% transport cost reduction; up to 22% distribution cost reduction'] },
-      { keys: ['digitalJourney'], cells: ['Digital Journey', 'In-field driver app with ePOD', 'Paperless delivery, real-time credits and returns'] },
-      { keys: ['tracking', 'fuel', 'fleetView'], cells: ['Fleet Pro (Track & Trace, Fuel Control, Fleet View)', 'Modular vehicle telematics — tracking, fuel management, AI driver safety, plus full fleet maintenance and lifecycle costing capability', 'Full fleet visibility, fuel loss eliminated, 98.7% seatbelt compliance improvement in field POC, controlled workshop spend'] },
-      { keys: ['stockMaster'], cells: ['Stock Master', 'Mobile warehouse inventory management', 'Accurate stock, fewer picking errors'] },
-      { keys: ['yardManager'], cells: ['Yard Manager', 'Live yard and gate operations', 'Reduced dwell time and late departures'] },
+      ['Route Builder (incl. Execution Manager)', 'AI route planning with live control tower', 'Up to 30% transport cost reduction; up to 22% distribution cost reduction'],
+      ['Digital Journey', 'In-field driver app with ePOD', 'Paperless delivery, real-time credits and returns'],
+      ['Fleet Pro (Track & Trace, Fuel Control, Fleet View)', 'Modular vehicle telematics — tracking, fuel management, AI driver safety, plus full fleet maintenance and lifecycle costing capability', 'Full fleet visibility, fuel loss eliminated, 98.7% seatbelt compliance improvement in field POC, controlled workshop spend'],
+      ['Stock Master', 'Mobile warehouse inventory management', 'Accurate stock, fewer picking errors'],
+      ['Yard Manager', 'Live yard and gate operations', 'Reduced dwell time and late departures'],
     ],
     footnote: "Route Builder includes Execution Manager, and Fleet Pro's Fuel Control module includes Track & Trace advanced tracking at no additional licence cost. Every Fleet Pro module reports live position to the Execution Manager control tower, so a mixed fleet is fully visible in one view.",
   };
@@ -62,27 +64,27 @@
     intro: 'All products are natively connected through the Sunstone Control Hub. Data flows automatically between them — planning informs execution, execution informs analysis, analysis improves the next plan.',
     head: ['Stage', 'Products', 'What Happens'],
     rows: [
-      { keys: ['stockMaster'], cells: ['Stock preparation', 'Stock Master', 'Warehouse teams count and pick stock against orders on mobile devices.'] },
-      { keys: ['routeBuilder'], cells: ['Route planning', 'Route Builder', 'Orders optimised into executable routes accounting for capacity, time windows, driver hours, traffic and cost.'] },
-      { keys: ['yardManager', 'digitalJourney'], cells: ['Yard and dispatch', 'Yard Manager, Digital Journey', 'Bays allocated, gate-out recorded, pre-trip inspections completed, routes received on device.'] },
-      { keys: ['digitalJourney', 'tracking', 'fuel', 'fleetView'], cells: ['On the road', 'Digital Journey, Fleet Pro', 'Drivers navigate and deliver. Track & Trace reports position, Fuel Control monitors consumption, Fleet View monitors driver safety.'] },
-      { keys: ['routeBuilder', 'tracking', 'fuel', 'fleetView'], cells: ['Live oversight', 'Execution Manager, Fleet Pro', 'Planned-versus-actual progress and exceptions monitored live. Every Fleet Pro product feeds live position to the control tower.'] },
-      { keys: ['digitalJourney'], cells: ['At the customer', 'Digital Journey', 'Delivery confirmed, ePOD captured, credits and returns processed on the spot.'] },
-      { keys: ['yardManager', 'digitalJourney', 'tracking', 'fuel', 'fleetView'], cells: ['Return and settle', 'Yard Manager, Digital Journey, Fleet Pro', 'Gate-in recorded, post-trip inspection completed, defects raised as maintenance jobs in Fleet Pro.'] },
-      { keys: ['routeBuilder', 'tracking', 'fuel', 'fleetView'], cells: ['Analyse and improve', 'Route Builder, Fleet Pro', 'Performance, cost per kilometre and compliance data feeds the next planning cycle.'] },
+      ['Stock preparation', 'Stock Master', 'Warehouse teams count and pick stock against orders on mobile devices.'],
+      ['Route planning', 'Route Builder', 'Orders optimised into executable routes accounting for capacity, time windows, driver hours, traffic and cost.'],
+      ['Yard and dispatch', 'Yard Manager, Digital Journey', 'Bays allocated, gate-out recorded, pre-trip inspections completed, routes received on device.'],
+      ['On the road', 'Digital Journey, Fleet Pro', 'Drivers navigate and deliver. Track & Trace reports position, Fuel Control monitors consumption, Fleet View monitors driver safety.'],
+      ['Live oversight', 'Execution Manager, Fleet Pro', 'Planned-versus-actual progress and exceptions monitored live. Every Fleet Pro product feeds live position to the control tower.'],
+      ['At the customer', 'Digital Journey', 'Delivery confirmed, ePOD captured, credits and returns processed on the spot.'],
+      ['Return and settle', 'Yard Manager, Digital Journey, Fleet Pro', 'Gate-in recorded, post-trip inspection completed, defects raised as maintenance jobs in Fleet Pro.'],
+      ['Analyse and improve', 'Route Builder, Fleet Pro', 'Performance, cost per kilometre and compliance data feeds the next planning cycle.'],
     ],
     footnote: '{CLIENT} is not required to deploy the full suite. Each product stands alone; the ecosystem advantage compounds as more are added.',
   };
 
   // --- Product sections ----------------------------------------------------
   // One entry per narrative section in the standard document, in document
-  // order. `keys` lists the config product keys that make the section
-  // relevant; a section is included when any of them is selected. Sections are
-  // renumbered 1..N so a partial suite still reads correctly.
+  // order. ALL of them are always rendered: this is the generic suite
+  // proposal, and it presents the whole suite regardless of what is ticked on
+  // the deal. What the client buys is settled by the Price List and the quote,
+  // not by cutting sections out of the narrative.
   var SECTIONS = [
     {
       id: 'routeBuilder',
-      keys: ['routeBuilder'],
       title: 'Route Builder',
       note: 'Includes Execution Manager',
       tagline: 'Plan smarter. See everything. Deliver cheaper.',
@@ -117,7 +119,6 @@
     },
     {
       id: 'digitalJourney',
-      keys: ['digitalJourney'],
       title: 'Digital Journey',
       tagline: 'Track faster, deliver smarter.',
       intro: 'Digital Journey guides drivers through every step of the delivery workflow on a single Android device — replacing lost dockets, disputed deliveries, manual credits processing and post-route admin with a structured digital process visible to the business in real time.',
@@ -146,16 +147,15 @@
     },
     {
       id: 'fleetPro',
-      keys: ['tracking', 'fuel', 'fleetView'],
       title: 'Fleet Pro',
       tagline: 'One platform. Three modules. Total fleet control.',
       intro: "Fleet Pro is Sunstone's modular vehicle telematics platform. {CLIENT} selects the modules that match the fleet — every module runs on the same platform, reports live position to the Execution Manager control tower, and feeds the same reporting and cost management layer.",
       moduleTable: {
         head: ['Module', 'Tracking Tier', 'Core Capability'],
         rows: [
-          { keys: ['tracking'], cells: ['Track & Trace', 'Advanced', 'Live tracking, trip history, driver behaviour and scoring, geofencing, vehicle security'] },
-          { keys: ['fuel'], cells: ['Fuel Control (includes Track & Trace)', 'Advanced', 'Live fuel level, theft detection, refill verification, fuel cost per kilometre'] },
-          { keys: ['fleetView'], cells: ['Fleet View', 'Basic', 'AI dashcam, DMS and ADAS driver safety, video evidence, escalation framework'] },
+          ['Track & Trace', 'Advanced', 'Live tracking, trip history, driver behaviour and scoring, geofencing, vehicle security'],
+          ['Fuel Control (includes Track & Trace)', 'Advanced', 'Live fuel level, theft detection, refill verification, fuel cost per kilometre'],
+          ['Fleet View', 'Basic', 'AI dashcam, DMS and ADAS driver safety, video evidence, escalation framework'],
         ],
         footnote: 'Modules can be deployed independently or combined. Fuel Control is supplied as a package that includes the full Track & Trace advanced tracking capability at no additional licence cost.',
       },
@@ -163,7 +163,6 @@
       // not describe cameras it is not buying.
       blocks: [
         {
-          keys: ['tracking'],
           heading: 'Module 1 — Track & Trace',
           intro: 'Advanced GPS tracking and driver behaviour monitoring — live location, full trip history, driver scoring, unlimited geofencing and vehicle security across the fleet.',
           bullets: [
@@ -178,7 +177,6 @@
           ],
         },
         {
-          keys: ['fuel'],
           heading: 'Module 2 — Fuel Control',
           intro: 'Fuel is typically the largest controllable cost in a transport operation and the most vulnerable to loss. Fuel Control provides near-perfect accuracy in live tank-level measurement, supplied with full Track & Trace advanced tracking so a fuel drop is always tied to where the vehicle was, who was driving and what it was doing.',
           bullets: [
@@ -193,7 +191,6 @@
           ],
         },
         {
-          keys: ['fleetView'],
           heading: 'Module 3 — Fleet View',
           intro: 'Traditional tracking tells you where a vehicle went. It cannot tell you whether the driver was fatigued, distracted, on the phone or wearing a seatbelt. Fleet View integrates HD forward- and driver-facing cameras with AI analysis, shifting safety management from investigating incidents to preventing them.',
           bullets: [
@@ -227,7 +224,6 @@
     },
     {
       id: 'stockMaster',
-      keys: ['stockMaster'],
       title: 'Stock Master',
       tagline: 'Count once. Count right.',
       intro: 'Manual stock counts are slow, error-prone and immediately out of date. Discrepancies between physical and system stock create picking errors, delivery shortages and write-offs that are difficult to trace. Stock Master replaces count sheets and spreadsheet reconciliation with a barcode-driven digital counting process.',
@@ -260,7 +256,6 @@
     },
     {
       id: 'yardManager',
-      keys: ['yardManager'],
       title: 'Yard Manager',
       tagline: 'From gate-in to gate-out, in full view.',
       intro: 'The yard is where hours disappear. Vehicles queue without visibility, bays sit idle while trucks wait, and nobody can say how long a vehicle has been on site or why. Delays in the yard cascade directly into late departures and missed delivery windows. Yard Manager turns the yard from a blind spot into a managed part of the chain.',
@@ -299,12 +294,12 @@
     intro: "All Sunstone products are natively API-connected through the Sunstone Control Hub — no integration project is required between Sunstone products. Open REST/JSON APIs over HTTPS connect the suite to {CLIENT}'s existing and future ERP, WMS, order management, HR and finance systems. Where a system transition is underway, structured Excel or CSV exchange serves as an interim method with a defined upgrade path.",
     head: ['Integration', 'Description'],
     rows: [
-      { keys: ['routeBuilder'], cells: ['Order ingestion', 'Sales orders and delivery instructions imported into Route Builder'] },
-      { cells: ['Master data sync', 'Customers, products, vehicles and drivers from the source system of record'] },
-      { keys: ['digitalJourney'], cells: ['Invoice and credit exchange', 'Digital Journey ePOD, credits and returns pushed to ERP for settlement'] },
-      { keys: ['stockMaster'], cells: ['Stock synchronisation', 'Stock Master count results posted to WMS or ERP'] },
-      { keys: ['tracking', 'fuel', 'fleetView'], cells: ['Telemetry export', 'Fleet Pro position, fuel and event data exposed via API'] },
-      { keys: ['tracking', 'fuel', 'fleetView'], cells: ['Maintenance data', 'Fleet Pro service and cost records exchanged with finance systems'] },
+      ['Order ingestion', 'Sales orders and delivery instructions imported into Route Builder'],
+      ['Master data sync', 'Customers, products, vehicles and drivers from the source system of record'],
+      ['Invoice and credit exchange', 'Digital Journey ePOD, credits and returns pushed to ERP for settlement'],
+      ['Stock synchronisation', 'Stock Master count results posted to WMS or ERP'],
+      ['Telemetry export', 'Fleet Pro position, fuel and event data exposed via API'],
+      ['Maintenance data', 'Fleet Pro service and cost records exchanged with finance systems'],
     ],
     security: {
       heading: 'Security and Data Ownership',
