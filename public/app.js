@@ -439,9 +439,13 @@ function renderQuote() {
 }
 
 // --- PROPOSAL ---------------------------------------------------------------
-// Assembles a client-facing proposal document, modelled on Sunstone's standard
-// proposals. Narrative comes from proposal.js (client-safe boilerplate); every
-// money figure comes from the client-safe quote projection (no cost/margin).
+// Renders Sunstone's STANDARD proposal document (proposal.js) verbatim. Only
+// two things vary between one generated proposal and the next: the customer
+// name, and the products included with their pricing. Nothing here invents
+// copy — if the standard document changes, change proposal.js.
+//
+// Every money figure comes from the live pricing config through the engine's
+// client-safe helpers, so no cost or margin data can reach the page.
 
 // Back-fill proposal state for quotes saved before this feature existed.
 function ensureProposal() {
@@ -450,72 +454,32 @@ function ensureProposal() {
   Object.keys(d).forEach((k) => { if (!(k in deal.proposal)) deal.proposal[k] = d[k]; });
 }
 
-// The list of selected products (in config order), each with its client copy.
-function proposalProducts() {
+function proposalClient() {
+  return (deal.customerName || '').trim() || '[Customer name]';
+}
+
+// The standard document writes whole percentages without a decimal ("5%", not
+// "5.0%"), keeping a decimal only when the rate actually has one.
+function propPct(n) {
+  const v = (Number(n) || 0) * 100;
+  return (Math.round(v * 10) / 10) + '%';
+}
+
+// The config product keys selected on this deal. With nothing selected the
+// document is the full generic suite proposal, exactly as the standard
+// template reads.
+function proposalKeys() {
   const cfg = P.getConfig();
-  return (cfg.products || [])
-    .filter((p) => deal.selected && deal.selected[p.key])
-    .map((p) => ({
-      key: p.key,
-      name: p.quoteLabel || p.name || p.key,
-      copy: window.ProposalCopy.copyFor(p.key, p.quoteLabel || p.name),
-    }));
+  const keys = (cfg.products || []).filter((p) => deal.selected && deal.selected[p.key]).map((p) => p.key);
+  return { set: new Set(keys), any: keys.length > 0 };
 }
 
-// Auto-generated defaults for each narrative field, from the current deal.
-function proposalAuto() {
-  const prods = proposalProducts();
-  const C = window.ProposalCopy.COMPANY;
-  const customer = deal.customerName || 'the client';
-  const brands = prods.map((p) => p.copy.brand);
-  const brandList = brands.length
-    ? (brands.length === 1 ? brands[0]
-      : brands.slice(0, -1).join(', ') + ' and ' + brands[brands.length - 1])
-    : 'the Sunstone product suite';
-
-  const subtitle = prods.length
-    ? prods.map((p) => p.copy.tagline).filter((v, i, a) => a.indexOf(v) === i).join('  |  ')
-    : 'Integrated logistics technology solution';
-
-  const exec =
-    `${C.name} (${C.short}) is pleased to present this proposal to ${customer}. ` +
-    `Sunstone proposes ${brandList} — a fully integrated logistics technology ` +
-    `solution addressing ${customer}'s operational requirements across a fleet of ` +
-    `${deal.vehicles} vehicle${deal.vehicles === 1 ? '' : 's'}.\n\n` +
-    `Each product is natively API-connected within the Sunstone Control Hub ` +
-    `ecosystem, so ${customer} deploys a single connected platform rather than a set ` +
-    `of disconnected systems. The sections that follow set out each proposed product, ` +
-    `how they work together, and the full commercial proposal.`;
-
-  const conclusion =
-    `Sunstone Logistic Systems welcomes the opportunity to partner with ${customer}. ` +
-    `The solution set out in this proposal delivers measurable improvements in ` +
-    `visibility, cost control and service levels, backed by Sunstone's implementation ` +
-    `and support teams. We would be glad to walk through this proposal in detail and ` +
-    `tailor the commercials to ${customer}'s exact requirements. Thank you for ` +
-    `considering Sunstone Logistic Systems.`;
-
-  const notes = [
-    'Subscription pricing is billed monthly in arrears, per the basis shown against each product.',
-    'Implementation is a once-off charge, payable per agreed milestones at the start of the project.',
-    'Hardware and installation are once-off charges, invoiced on delivery / commissioning.',
-    'Pricing is valid for 30 days from the proposal date. All prices exclude VAT.',
-    'All Sunstone products are natively API-connected; integration to third-party systems is available via open API.',
-  ];
-
-  return {
-    subtitle, submittedTo: customer, execSummary: exec,
-    about: C.about, workingTogether: C.workingTogether,
-    notes: notes.join('\n'), conclusion,
-  };
-}
-
-// Resolve field: user override if set, else auto-generated default.
-function propField(key) {
-  ensureProposal();
-  const v = deal.proposal[key];
-  if (v !== null && v !== undefined) return v;
-  return proposalAuto()[key];
+// A template row/section is included when it names no products at all (it is
+// unconditional), or when any product it names is selected.
+function proposalIncludes(keys, sel) {
+  if (!keys || !keys.length) return true;
+  if (!sel.any) return true;
+  return keys.some((k) => sel.set.has(k));
 }
 
 function renderProposal() {
@@ -525,124 +489,229 @@ function renderProposal() {
 
 function renderProposalDoc() {
   ensureProposal();
-  const q = result.clientQuote;
-  const prods = proposalProducts();
-  const C = window.ProposalCopy.COMPANY;
-  const pr = deal.proposal;
-  const para = (t) => escapeHtml(t).split('\n').filter((s) => s.trim())
-    .map((s) => `<p>${s}</p>`).join('');
+  const T = window.ProposalTemplate;
+  const host = document.getElementById('proposal-doc');
+  if (!host || !T) return;
+  const client = proposalClient();
+  const sel = proposalKeys();
+  const t = (s) => escapeHtml(T.withClient(s, client));
+  const paras = (arr) => arr.map((s) => `<p>${t(s)}</p>`).join('');
+  const bullets = (arr) => `<ul class="prop-caps">${arr.map((s) => `<li>${t(s)}</li>`).join('')}</ul>`;
+  const table = (head, rows) => `
+    <table class="prop-table">
+      <thead><tr>${head.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map((cells) => `<tr>${cells.map((c) => `<td>${t(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table>`;
+  const keep = (rows) => rows.filter((r) => proposalIncludes(r.keys, sel)).map((r) => r.cells);
 
-  // Product narrative sections.
-  const productSections = prods.map((p, i) => {
-    const c = p.copy;
-    const caps = c.capabilities.map((x) => `<li>${escapeHtml(x)}</li>`).join('');
+  // --- product narrative sections, renumbered 1..N ---------------------------
+  const sections = T.SECTIONS.filter((s) => proposalIncludes(s.keys, sel));
+  const sectionHtml = sections.map((s, i) => {
+    const blocks = s.blocks.filter((b) => proposalIncludes(b.keys, sel)).map((b) => `
+      <p class="prop-caphdr">${t(b.heading)}</p>
+      ${b.intro ? `<p>${t(b.intro)}</p>` : ''}
+      ${b.bullets ? bullets(b.bullets) : ''}
+      ${b.footnote ? `<p class="prop-note">${t(b.footnote)}</p>` : ''}`).join('');
+    const mt = s.moduleTable;
+    const modules = mt && keep(mt.rows).length ? `
+      ${table(mt.head, keep(mt.rows))}
+      <p class="prop-note">${t(mt.footnote)}</p>` : '';
     return `
-      <h3>${i + 1}. ${escapeHtml(c.brand)}</h3>
-      <p class="prop-tag">${escapeHtml(c.tagline)} &nbsp;•&nbsp; Primary users: ${escapeHtml(c.user)}</p>
-      <p><strong>The challenge.</strong> ${escapeHtml(c.challenge)}</p>
-      <p><strong>The Sunstone solution.</strong> ${escapeHtml(c.solution)}</p>
-      <p class="prop-caphdr">Key capabilities</p>
-      <ul class="prop-caps">${caps}</ul>`;
+      <h3 class="prop-h">${i + 1}. ${t(s.title)}</h3>
+      ${s.note ? `<p class="prop-sub">${t(s.note)}</p>` : ''}
+      <p class="prop-tag">${t(s.tagline)}</p>
+      <p>${t(s.intro)}</p>
+      ${modules}
+      ${blocks}
+      <p class="prop-caphdr">Outcome</p>
+      <p>${t(s.outcome)}</p>`;
   }).join('');
 
-  // Commercials — reuse the client-safe quote projection.
-  const subRows = q.subscriptionItems.map((i) => `
-    <tr><td>${escapeHtml(i.product)}</td><td>${escapeHtml(i.billingLabel)}</td><td class="num">${i.qty}</td><td class="num">${cur(i.unitPrice)}</td><td class="num">${cur(i.monthly)}</td><td class="num">${cur(i.annual)}</td></tr>`).join('');
-  const implRows = q.implementationItems.map((i) => `
-    <tr><td>${escapeHtml(i.desc)}</td><td class="num">${i.hours}</td><td class="num">${cur(i.rate, 0)}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
-  const hwRows = q.hardwareItems.map((i) => `
-    <tr><td>${escapeHtml(i.desc)}</td><td class="num">${i.qty ?? ''}</td><td class="num">${i.unit != null ? cur(i.unit) : ''}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
+  // --- price list, entirely from the live config ----------------------------
+  const cfg = P.getConfig();
+  const billingLabel = (b) => b === 'perUser' ? 'Per user' : b === 'flat' ? 'Flat / month' : 'Per vehicle';
+  const discountLabel = (p) => {
+    if (p.bundleEligible && p.volumeEligible) return 'Bundle, volume';
+    if (p.bundleEligible) return 'Bundle';
+    if (p.volumeEligible) return 'Volume';
+    return 'No bundle, no volume';
+  };
+  const subRows = (cfg.products || []).map((p) => {
+    const price = P.listPrice(p);
+    // A product with no meaningful list price is quoted on application, the way
+    // Yard Manager appears on the standard document.
+    const shown = Number.isFinite(price) && price > 0 ? cur(price) : T.PRICE_LIST.subscription.onRequest;
+    return [p.quoteLabel || p.name, billingLabel(p.billing), shown, discountLabel(p)];
+  });
 
-  const commercials = `
-    <h3>Commercial Proposal</h3>
-    <p class="prop-caphdr">Software — Monthly Subscription</p>
-    <table>
-      <thead><tr><th>Product</th><th>Basis</th><th class="num">Qty</th><th class="num">Unit/mo</th><th class="num">Monthly ${displayCurrency}</th><th class="num">Annual ${displayCurrency}</th></tr></thead>
-      <tbody>${subRows || '<tr><td colspan="6">No subscription items selected.</td></tr>'}
-        <tr class="q-total"><td>Total subscription (excl. VAT)</td><td></td><td></td><td></td><td class="num">${cur(q.subscriptionMonthly)}</td><td class="num">${cur(q.subscriptionAnnual)}</td></tr>
-      </tbody>
-    </table>
-    ${implRows ? `
-    <p class="prop-caphdr">Implementation — Once-Off</p>
-    <table>
-      <thead><tr><th>Description</th><th class="num">Hours</th><th class="num">Rate/hr ${displayCurrency}</th><th class="num">Total ${displayCurrency}</th></tr></thead>
-      <tbody>${implRows}
-        <tr class="q-total"><td>Total implementation (excl. VAT)</td><td></td><td></td><td class="num">${cur(q.implementationTotal)}</td></tr>
-      </tbody>
-    </table>` : ''}
-    ${hwRows ? `
-    <p class="prop-caphdr">Hardware &amp; Installation — Once-Off</p>
-    <table>
-      <thead><tr><th>Description</th><th class="num">Qty</th><th class="num">Unit ${displayCurrency}</th><th class="num">Total ${displayCurrency}</th></tr></thead>
-      <tbody>${hwRows}
-        <tr class="q-total"><td>Total hardware &amp; installation (excl. VAT)</td><td></td><td></td><td class="num">${cur(q.hardwareTotal)}</td></tr>
-      </tbody>
-    </table>` : ''}
-    <div class="q-grand">
-      <div class="g-row"><span>YEAR-1 TOTAL (recurring + one-time)</span><span>${fmtR(q.year1Total)}</span></div>
-      <div class="g-row sub"><span>Year 2 onwards (recurring subscription only)</span><span>${fmtR(q.year2Onwards)}</span></div>
-    </div>
-    <p class="prop-caphdr">Pricing Notes</p>
-    <ul class="q-notes">${escapeHtml(propField('notes')).split('\n').filter((s) => s.trim()).map((s) => `<li>${s}</li>`).join('')}
-      <li>All amounts are shown in ${curSym()} ${displayCurrency}${displayCurrency !== 'ZAR' ? ' — converted from South African Rand at the exchange rate configured at time of quoting; final invoicing may differ with prevailing rates.' : '.'}</li>
-    </ul>`;
+  const bundleRows = Object.keys(cfg.bundleSchedule || {})
+    .map(Number).filter((n) => !Number.isNaN(n)).sort((a, b) => a - b)
+    .map((n) => {
+      const d = cfg.bundleSchedule[n];
+      return [`${n} product${n === 1 ? '' : 's'}`, d > 0 ? propPct(d) : '—'];
+    });
 
-  document.getElementById('proposal-doc').innerHTML = `
+  // The top tier is open-ended. Config stores it with a sentinel max (999999),
+  // so anything that large reads as "2000+ vehicles" rather than a literal range.
+  const OPEN_ENDED = 99999;
+  const volumeRows = (cfg.volumeTiers || []).map((v) => {
+    const range = (v.max == null || !Number.isFinite(v.max) || v.max >= OPEN_ENDED)
+      ? `${v.min}+ vehicles` : `${v.min}–${v.max} vehicles`;
+    return [range, v.name, v.discount > 0 ? propPct(v.discount) : '—'];
+  });
+
+  // Hardware + installation lines come from the same engine helper the client
+  // quote page uses, so anything added in Config appears here automatically.
+  const hwOpts = P.clientHardwareOptions();
+  const hwRows = hwOpts.hardware.map((h) => [h.desc, cur(h.unitPrice)]);
+  const instRows = hwOpts.install.map((h) => [h.desc, cur(h.unitPrice)]);
+  const PL = T.PRICE_LIST;
+  const intlNote = PL.hardware.footnote.replace('{INTL}', propPct(hwOpts.intlShippingSurcharge));
+
+  const priceList = `
+    <h2 class="prop-h2">${t(PL.title)}</h2>
+    <p>${t(PL.intro)}</p>
+
+    <p class="prop-caphdr">${t(PL.subscription.heading)}</p>
+    ${table(PL.subscription.head.map((h, i) => i === 2 ? `Price / month (${displayCurrency})` : h), subRows)}
+    <p class="prop-note">${t(PL.subscription.footnote)}</p>
+
+    <p class="prop-caphdr">${t(PL.bundle.heading)}</p>
+    <p>${t(PL.bundle.intro)}</p>
+    ${table(PL.bundle.head, bundleRows)}
+
+    <p class="prop-caphdr">${t(PL.volume.heading)}</p>
+    <p>${t(PL.volume.intro)}</p>
+    ${table(PL.volume.head, volumeRows)}
+    <p class="prop-note">${t(PL.volume.footnote)}</p>
+
+    <p class="prop-caphdr">${t(PL.hardware.heading)}</p>
+    ${table([PL.hardware.head[0], `Unit price (${displayCurrency})`], hwRows)}
+    <p class="prop-note">${t(intlNote)}</p>
+
+    <p class="prop-caphdr">${t(PL.install.heading)}</p>
+    ${table([PL.install.head[0], `Rate per unit (${displayCurrency})`], instRows)}
+
+    <p class="prop-caphdr">${t(PL.implementation.heading)}</p>
+    <p>${t(PL.implementation.intro)}</p>
+
+    <p class="prop-caphdr">${t(PL.notes.heading)}</p>
+    ${bullets(PL.notes.bullets)}
+    ${displayCurrency !== 'ZAR' ? `<p class="prop-note">Amounts are shown in ${curSym()} ${displayCurrency}, converted from South African Rand at the exchange rate configured at the time of printing; final invoicing may differ with prevailing rates.</p>` : ''}`;
+
+  // --- contents -------------------------------------------------------------
+  const contents = [
+    T.EXEC_SUMMARY ? 'Executive Summary' : null,
+    T.SUITE_IN_A_DAY.title,
+    ...sections.map((s, i) => `${i + 1}. ${s.title}`),
+    T.INTEGRATION.title,
+    T.IMPLEMENTATION.title,
+    PL.title,
+    T.CONCLUSION.title,
+  ].filter(Boolean);
+
+  const C = T.COMPANY;
+  const footer = `
+    <div class="prop-footer">
+      <span>${escapeHtml(C.phone)}</span>
+      <span>${escapeHtml(C.emails)}</span>
+      <span>${escapeHtml(C.address)}</span>
+    </div>`;
+
+  host.innerHTML = `
     <div class="prop-cover">
-      <div class="prop-kicker">PROPOSAL</div>
-      <h1>${escapeHtml(propField('subtitle'))}</h1>
+      <div class="prop-kicker">${escapeHtml(T.COVER.kicker)}</div>
+      <h1 class="prop-title">${escapeHtml(T.COVER.title)}</h1>
+      <div class="prop-subtitle">${escapeHtml(T.COVER.subtitle)}</div>
+      <div class="prop-suite">${escapeHtml(T.COVER.suite)}</div>
       <div class="prop-meta">
-        <div><span>Submitted to:</span> <strong>${escapeHtml(propField('submittedTo') || '—')}</strong></div>
-        <div><span>Submitted by:</span> ${escapeHtml(C.name)} (${C.short})</div>
-        <div><span>Date:</span> ${escapeHtml(deal.quoteDate)}</div>
-        <div><span>Fleet size:</span> ${deal.vehicles} vehicle${deal.vehicles === 1 ? '' : 's'}${deal.users ? ` &nbsp;•&nbsp; Users: ${deal.users}` : ''}</div>
+        <div><span>Submitted to:</span> <strong>${escapeHtml(client)}</strong></div>
+        <div><span>Submitted by:</span> ${escapeHtml(C.name)} (${escapeHtml(C.short)})</div>
+        <div><span>Date:</span> ${escapeHtml(proposalDateLabel())}</div>
       </div>
+      ${footer}
     </div>
 
-    <h3>Executive Summary</h3>
-    ${para(propField('execSummary'))}
+    <div class="prop-page">
+      <h2 class="prop-h2">${escapeHtml(T.CONTENTS_TITLE)}</h2>
+      <ul class="prop-toc">${contents.map((c) => `<li>${escapeHtml(c)}</li>`).join('')}</ul>
+      ${footer}
+    </div>
 
-    ${pr.includeAbout ? `<h3>About ${escapeHtml(C.name)}</h3>${para(propField('about'))}` : ''}
+    <div class="prop-page">
+      <h2 class="prop-h2">Executive Summary</h2>
+      ${paras(T.EXEC_SUMMARY.paras)}
+      ${table(T.EXEC_SUMMARY.head, keep(T.EXEC_SUMMARY.rows))}
+      <p class="prop-note">${t(T.EXEC_SUMMARY.footnote)}</p>
+      ${footer}
+    </div>
 
-    ${pr.includeProducts && productSections ? `<h3>Proposed Solution</h3>${productSections}` : ''}
+    <div class="prop-page">
+      <h2 class="prop-h2">${t(T.SUITE_IN_A_DAY.title)}</h2>
+      <p>${t(T.SUITE_IN_A_DAY.intro)}</p>
+      ${table(T.SUITE_IN_A_DAY.head, keep(T.SUITE_IN_A_DAY.rows))}
+      <p class="prop-note">${t(T.SUITE_IN_A_DAY.footnote)}</p>
+      ${footer}
+    </div>
 
-    ${pr.includeWorkingTogether && prods.length > 1 ? `<h3>How the Products Work Together</h3>${para(propField('workingTogether'))}` : ''}
+    <div class="prop-page">
+      ${sectionHtml}
+      ${footer}
+    </div>
 
-    ${pr.includeCommercials ? commercials : ''}
+    <div class="prop-page">
+      <h2 class="prop-h2">${t(T.INTEGRATION.title)}</h2>
+      <p class="prop-caphdr">${t(T.INTEGRATION.heading)}</p>
+      <p>${t(T.INTEGRATION.intro)}</p>
+      ${table(T.INTEGRATION.head, keep(T.INTEGRATION.rows))}
+      <p class="prop-caphdr">${t(T.INTEGRATION.security.heading)}</p>
+      ${bullets(T.INTEGRATION.security.bullets)}
+      ${footer}
+    </div>
 
-    ${pr.includeConclusion ? `<h3>Conclusion</h3>${para(propField('conclusion'))}` : ''}
+    <div class="prop-page">
+      <h2 class="prop-h2">${t(T.IMPLEMENTATION.title)}</h2>
+      ${table(T.IMPLEMENTATION.head, T.IMPLEMENTATION.rows)}
+      <p class="prop-caphdr">${t(T.IMPLEMENTATION.timeline.heading)}</p>
+      <p>${t(T.IMPLEMENTATION.timeline.intro)}</p>
+      <p class="prop-note">${t(T.IMPLEMENTATION.timeline.footnote)}</p>
+      <p class="prop-caphdr">${t(T.IMPLEMENTATION.support.heading)}</p>
+      ${bullets(T.IMPLEMENTATION.support.bullets)}
+      ${footer}
+    </div>
 
-    <p class="prop-signoff">${escapeHtml(C.name)} &nbsp;•&nbsp; Customer references available on request.</p>`;
+    <div class="prop-page">
+      ${priceList}
+      ${footer}
+    </div>
+
+    <div class="prop-page">
+      <h2 class="prop-h2">${t(T.CONCLUSION.title)}</h2>
+      ${paras(T.CONCLUSION.paras)}
+      ${footer}
+    </div>`;
 }
 
-// Editable narrative controls (kept separate from the rendered document).
+// The standard document dates the proposal by month and year.
+function proposalDateLabel() {
+  const d = new Date(deal.quoteDate || Date.now());
+  if (Number.isNaN(d.getTime())) return deal.quoteDate || '';
+  return d.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+}
+
+// The document is fixed boilerplate, so there is nothing to edit here — this
+// panel just tells the user what drives the two things that do vary.
 function renderProposalFields() {
-  const pr = deal.proposal;
   const el = document.getElementById('prop-fields');
   if (!el) return;
-  const ta = (key, label, rows) =>
-    `<label class="prop-field"><span>${label}</span>
-      <textarea data-prop="${key}" rows="${rows || 3}">${escapeHtml(propField(key))}</textarea></label>`;
-  const chk = (key, label) =>
-    `<label class="prop-chk"><input type="checkbox" data-prop-inc="${key}" ${pr[key] ? 'checked' : ''}> ${label}</label>`;
-
+  const sel = proposalKeys();
+  const names = (P.getConfig().products || []).filter((p) => sel.set.has(p.key))
+    .map((p) => p.quoteLabel || p.name);
   el.innerHTML = `
-    <div class="prop-grid">
-      ${ta('subtitle', 'Cover subtitle', 2)}
-      ${ta('submittedTo', 'Submitted to', 1)}
-    </div>
-    ${ta('execSummary', 'Executive summary', 5)}
-    ${ta('about', 'About Sunstone', 5)}
-    ${ta('workingTogether', 'How the products work together (shown when 2+ products)', 4)}
-    ${ta('notes', 'Pricing notes (one per line)', 4)}
-    ${ta('conclusion', 'Conclusion', 4)}
-    <div class="prop-incs">
-      <span class="note">Include sections:</span>
-      ${chk('includeAbout', 'About Sunstone')}
-      ${chk('includeProducts', 'Product descriptions')}
-      ${chk('includeWorkingTogether', 'Working together')}
-      ${chk('includeCommercials', 'Commercials')}
-      ${chk('includeConclusion', 'Conclusion')}
+    <div class="prop-state">
+      <div><span>Customer</span><strong>${escapeHtml(proposalClient())}</strong></div>
+      <div><span>Products</span><strong>${names.length ? escapeHtml(names.join(', ')) : 'Full suite (nothing selected)'}</strong></div>
+      <div><span>Currency</span><strong>${escapeHtml(displayCurrency)}</strong></div>
     </div>`;
 }
 
@@ -720,7 +789,11 @@ function syncInputsFromDeal() {
 
 // --- Wire up static inputs --------------------------------------------------
 function wireInputs() {
-  document.getElementById('in-customer').addEventListener('input', (e) => { deal.customerName = e.target.value; renderQuote(); });
+  // The customer name is one of the only two things that vary on the proposal,
+  // so it has to reach the document as it is typed — not just on a recompute.
+  document.getElementById('in-customer').addEventListener('input', (e) => {
+    deal.customerName = e.target.value; renderQuote(); renderProposal();
+  });
   document.getElementById('in-vehicles').addEventListener('input', (e) => { deal.vehicles = Math.max(0, Number(e.target.value) || 0); recompute(); });
   document.getElementById('in-users').addEventListener('input', (e) => { deal.users = Math.max(0, Number(e.target.value) || 0); recompute(); });
   document.getElementById('in-date').addEventListener('input', (e) => { deal.quoteDate = e.target.value; renderQuote(); });
@@ -741,21 +814,8 @@ function wireInputs() {
   document.getElementById('rent-term').addEventListener('change', (e) => { deal.rental.termMonths = Number(e.target.value); recompute(); });
   document.getElementById('rent-mode').addEventListener('change', (e) => { deal.rental.mode = e.target.value; recompute(); });
 
-  // Proposal narrative editing (event-delegated — the fields are re-rendered).
-  const propFields = document.getElementById('prop-fields');
-  propFields.addEventListener('input', (e) => {
-    const key = e.target.dataset && e.target.dataset.prop;
-    if (key) { ensureProposal(); deal.proposal[key] = e.target.value; renderProposalDoc(); }
-  });
-  propFields.addEventListener('change', (e) => {
-    const key = e.target.dataset && e.target.dataset.propInc;
-    if (key) { ensureProposal(); deal.proposal[key] = e.target.checked; renderProposal(); }
-  });
-  document.getElementById('prop-regen').addEventListener('click', () => {
-    deal.proposal = defaultDeal().proposal;
-    renderProposal();
-    document.getElementById('proposal-doc').scrollIntoView({ behavior: 'smooth' });
-  });
+  // The proposal is a fixed template — nothing to edit, so there are no
+  // narrative handlers. It re-renders from the deal on every recompute.
   const printProposal = () => {
     document.body.classList.add('print-proposal');
     window.print();

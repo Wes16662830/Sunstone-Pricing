@@ -61,6 +61,31 @@ Two views toggled in one app:
 - **Internal view (the "Internal Margin" tab)** — full cost, margin, contribution,
   step-cost, discount walk-down, and margin-floor data.
 
+### Proposal tab — Sunstone's standard proposal document
+
+The **Proposal** tab generates Sunstone's standard client proposal ("ControlHub
+— Integrated Logistics & Fleet Management Solution"). The document is a fixed
+template held in `public/proposal.js`, transcribed from the proposal the team
+actually sends. **Only two things vary between one generated proposal and the
+next:**
+
+1. **the customer name** — written as the `{CLIENT}` token in the template and
+   substituted wherever it appears (the cover, the executive summary, the
+   product sections, the security and commercial notes, the conclusion);
+2. **the products and their pricing** — product sections are included for the
+   products ticked on the Subscription tab, renumbered `1..N`; with nothing
+   ticked the document reads as the full generic suite proposal. Every figure in
+   the Price List comes from the live pricing config through the same
+   client-safe helpers the client pages use.
+
+There is deliberately **no narrative editing** in the tab: the wording is the
+standard document. If the standard document changes, change `proposal.js` — do
+not special-case copy in `app.js`.
+
+Because a proposal is printed and sent to a customer, the same margin-safety
+rule applies as to the client pages: list/sell prices and published discount
+levels only, asserted by the test suite.
+
 ### Client quote page (`/quote`) — safe to send to a customer
 
 There is a separate, self-service **client pricing page** at `/quote` you can
