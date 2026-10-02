@@ -241,21 +241,33 @@ npx wrangler pages dev                                      # → http://localho
 
 `.dev.vars` and `.wrangler/` are gitignored; real secrets live only in Cloudflare.
 
-### Auto-deploy on push (GitHub Actions)
+### Auto-deploy on push
 
-`.github/workflows/deploy.yml` deploys to Cloudflare Pages on **every push**:
-push to `main` → production, push to any other branch → a preview URL. Cloudflare
-decides production vs preview from the branch name, so a feature branch is never
-forced into production.
+Two equivalent pipelines exist while the project is moving hosts. **Keep them in
+sync, and once GitLab is the only remote delete the GitHub workflow** — otherwise
+the same commit deploys twice.
 
-To arm it, add two **GitHub repo secrets** (Settings → Secrets and variables →
-Actions) — the only manual step, and it must be you since the token is tied to
-your Cloudflare account:
+| Host | File |
+|------|------|
+| GitLab (current target) | `.gitlab-ci.yml` — stages `test` then `deploy` |
+| GitHub | `.github/workflows/deploy.yml` |
 
-| Secret | Where to get it |
+Both deploy on **every push**: push to `main` → production, push to any other
+branch → a preview URL. Cloudflare decides production vs preview from the branch
+name, so a feature branch is never forced into production.
+
+Both read the same two credentials — GitLab CI/CD variables (Settings → CI/CD →
+Variables, add as **Masked**) or GitHub repo secrets (Settings → Secrets and
+variables → Actions):
+
+| Variable | Where to get it |
 |--------|-----------------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard → My Profile → API Tokens → Create Token → grant **Cloudflare Pages: Edit** (and **D1: Edit** if you later run migrations from CI). |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard → My Profile → API Tokens → Create Token → grant **Cloudflare Pages: Edit** and **D1: Edit** (D1 edit lets CI list/create the database). |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard → right sidebar of any account page. |
+
+On GitLab, leave both **unprotected** if you want preview deploys from feature
+branches — a protected variable is only exposed on protected branches, so a
+feature-branch pipeline fails at the first `wrangler` call with an auth error.
 
 The app's `PASSWORD` and `SESSION_SECRET` are **Cloudflare Pages project secrets**
 (set once with `wrangler pages secret put`), not GitHub secrets — they persist on

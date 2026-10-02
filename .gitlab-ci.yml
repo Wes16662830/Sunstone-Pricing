@@ -1,0 +1,96 @@
+# GitLab CI — test, then deploy to Cloudflare Pages + D1.
+#
+# Mirrors .github/workflows/deploy.yml step for step. Keep the two in sync while
+# both exist; once GitLab is the only remote, delete the GitHub workflow so the
+# same commit cannot deploy twice.
+#
+# Branch behaviour matches Cloudflare's own convention:
+#   main            -> PRODUCTION deployment (the Pages production branch)
+#   any other branch -> a PREVIEW deployment at its own URL
+# Cloudflare decides which from the --branch value below; nothing here forces a
+# feature branch into production.
+#
+# ---------------------------------------------------------------------------
+# ONE-TIME SETUP — Settings -> CI/CD -> Variables. Add each as "Masked".
+#
+#   CLOUDFLARE_API_TOKEN   token with "Cloudflare Pages: Edit" + "D1: Edit"
+#                          (D1 edit lets the job list/create the database)
+#   CLOUDFLARE_ACCOUNT_ID  from the Cloudflare dashboard sidebar
+#
+# Leave both UNPROTECTED if you want preview deploys from feature branches:
+# a "Protected" variable is only exposed on protected branches, so a feature
+# branch pipeline would fail at the first wrangler call with an auth error.
+# If you would rather only ever deploy main, mark them Protected instead and
+# change the deploy rule below to `if: $CI_COMMIT_BRANCH == "main"`.
+#
+# The app's own secrets (PASSWORD, CLIENT_PASSWORD, SESSION_SECRET) are
+# Cloudflare Pages project secrets, NOT CI variables. They persist on the Pages
+# project, so CI never sees or needs them.
+# ---------------------------------------------------------------------------
+
+image: node:22
+
+variables:
+  WRANGLER: "npx -y wrangler@4"
+  GIT_DEPTH: "20"
+
+stages:
+  - test
+  - deploy
+
+# Zero-dependency suites: 95 checks against the pricing workbook + 151 engine,
+# robustness and margin-safety checks. Seconds to run, and they are the net that
+# catches a calculation drifting from the business's real numbers.
+#
+# The API and UI suites are not here: they need a running server, and the UI
+# suite needs Playwright. Run those locally (see README) before a release.
+test:
+  stage: test
+  interruptible: true
+  rules:
+    - if: $CI_COMMIT_BRANCH
+  script:
+    - npm test
+
+deploy:
+  stage: deploy
+  # Only deploy a commit whose tests passed — `needs` keeps the ordering
+  # explicit rather than relying on stage order alone.
+  needs: ["test"]
+  rules:
+    - if: $CI_COMMIT_BRANCH
+  # GitLab's closest equivalent to the GitHub workflow's concurrency group:
+  # resource_group serialises deploys of the same branch so two never race.
+  # (It queues rather than cancelling; to also cancel superseded pipelines turn
+  # on Settings -> CI/CD -> General pipelines -> "Auto-cancel redundant pipelines",
+  # which acts on the `interruptible` flag below.)
+  resource_group: cf-pages-$CI_COMMIT_REF_NAME
+  interruptible: true
+  environment:
+    name: $CI_COMMIT_REF_NAME
+    url: https://sunstone-pricing.pages.dev
+  script:
+    # Resolve the D1 database id from the account the token belongs to, creating
+    # the database on first run, then write it into wrangler.toml so the
+    # Functions bind to the real database. This is why the committed
+    # database_id is a zeros placeholder, and what prevents
+    # "Error 8000022: Invalid database UUID" after an account move.
+    - |
+      set -euo pipefail
+      get_id() {
+        $WRANGLER d1 list --json 2>/dev/null \
+          | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const a=JSON.parse(s);const m=a.find(x=>x.name==="sunstone-quotes");process.stdout.write(m&&m.uuid?m.uuid:"")}catch(e){process.stdout.write("")}})'
+      }
+      ID="$(get_id)"
+      if [ -z "$ID" ]; then
+        echo "D1 database 'sunstone-quotes' not found — creating it."
+        $WRANGLER d1 create sunstone-quotes || true
+        ID="$(get_id)"
+      fi
+      if [ -z "$ID" ]; then echo "ERROR: could not resolve the D1 database id"; exit 1; fi
+      echo "Using D1 database id: $ID"
+      sed -i "s|^database_id = .*|database_id = \"$ID\"|" wrangler.toml
+      grep '^database_id' wrangler.toml
+    # Idempotent (CREATE TABLE IF NOT EXISTS) — safe on every deploy.
+    - $WRANGLER d1 execute sunstone-quotes --remote --file=schema.sql
+    - $WRANGLER pages deploy public --project-name=sunstone-pricing --branch="$CI_COMMIT_REF_NAME"
