@@ -825,6 +825,10 @@ function renderProposalFields() {
 function renderMargin() {
   const m = result.internalMargin;
   const tb = document.getElementById('margin-tbody');
+  // The table is rebuilt on every recompute, which would drop keyboard focus
+  // each time a box is ticked. Remember which one had it and put it back.
+  const focusedKey = document.activeElement
+    && document.activeElement.dataset && document.activeElement.dataset.marginSel;
   tb.innerHTML = '';
   m.rows.forEach((r) => {
     const tr = document.createElement('tr');
@@ -832,7 +836,8 @@ function renderMargin() {
     const warnColor = r.stepWarning.startsWith('⚠') ? 'color:var(--warn)' : '';
     tr.innerHTML = `
       <td>${r.name}<span class="row-basis">${escapeHtml(r.billingLabel || '')}</span></td>
-      <td>${r.selected ? '☑' : '☐'}</td>
+      <td style="text-align:center"><input type="checkbox" data-margin-sel="${r.key}" ${r.selected ? 'checked' : ''}
+          title="Include ${escapeHtml(r.name)} in the quote — the same tick as on the Subscription tab"></td>
       <td class="num">${cur(r.revenue)}</td>
       <td class="num">${cur(r.marginalCost, 0)}</td>
       <td class="num">${cur(r.monthlyCost)}</td>
@@ -841,6 +846,18 @@ function renderMargin() {
       <td style="${warnColor}">${r.stepWarning}</td>`;
     tb.appendChild(tr);
   });
+  // Products can be picked here as well as on the Subscription tab, so a
+  // scenario can be built without leaving this page. Same deal state either way.
+  tb.querySelectorAll('[data-margin-sel]').forEach((cb) => {
+    cb.addEventListener('change', (e) => {
+      deal.selected[e.target.dataset.marginSel] = e.target.checked;
+      recompute();
+    });
+  });
+  if (focusedKey) {
+    const back = tb.querySelector(`[data-margin-sel="${focusedKey}"]`);
+    if (back) back.focus();
+  }
   document.getElementById('margin-totals').innerHTML = `
     <tr class="total"><td>TOTAL revenue</td><td>${fmtR(m.totalRevenue)}</td></tr>
     <tr><td>TOTAL cost</td><td>${fmtR(m.totalCost)}</td></tr>
@@ -1956,6 +1973,7 @@ async function init() {
   wireClientLinks();
   wireScenario();
   document.getElementById('sub-clear').addEventListener('click', clearProductSelection);
+  document.getElementById('margin-clear').addEventListener('click', clearProductSelection);
   document.getElementById('impl-reset').addEventListener('click', resetImplementationSuggestions);
   syncInputsFromDeal();
   renderConfig();
