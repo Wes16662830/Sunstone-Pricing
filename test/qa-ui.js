@@ -384,6 +384,64 @@ function check(name, cond, detail) {
   const gmDisc = await gmNow();
   check('discount override changes GM', gmDisc !== gmAuto, `${gmAuto} vs ${gmDisc}`);
 
+  // Work back from a price the client has named.
+  const tgtBox = p.locator('#scn-tgt-amt');
+  await tgtBox.click();
+  for (const ch of '400') { await p.keyboard.type(ch); await p.waitForTimeout(140); }
+  await p.waitForTimeout(500);
+  check('the target amount can be typed without losing the box',
+    (await tgtBox.inputValue()) === '400', await tgtBox.inputValue());
+  const verdict = () => p.$eval('.tgt-verdict', (e) => e.innerText.replace(/\n/g, ' '));
+  check('a per-vehicle target is multiplied by the fleet', /48[,.]000/.test(await verdict()), await verdict());
+  const tgtRows = () => p.$$eval('#scn-tgt-out tbody tr', (rs) => rs.map((r) =>
+    [...r.querySelectorAll('td')].map((t) => t.innerText.split('\n')[0].trim())));
+
+  // Cost basis: one GM for every product. List basis: one discount for every product.
+  const costRows = await tgtRows();
+  const costGMs = costRows.map((r) => r[6]);
+  check('cost basis gives every product the same GM', new Set(costGMs).size === 1, costGMs.join(','));
+  await p.selectOption('#scn-tgt-basis', 'list');
+  await p.waitForTimeout(500);
+  const listRows = await tgtRows();
+  const listDiscs = listRows.map((r) => r[4]);
+  check('list basis gives every product the same discount', new Set(listDiscs).size === 1, listDiscs.join(','));
+  check('list basis leaves GM differing by product',
+    new Set(listRows.map((r) => r[6])).size > 1, listRows.map((r) => r[6]).join(','));
+
+  // The whole-bill mode.
+  await p.selectOption('#scn-tgt-mode', 'total');
+  await p.waitForTimeout(400);
+  await tgtBox.fill('48000');
+  await p.waitForTimeout(500);
+  check('a total target is used as given', /48[,.]000/.test(await verdict()), await verdict());
+
+  // Applying writes the allocation into the per-product table.
+  await p.selectOption('#scn-tgt-basis', 'cost');
+  await p.waitForTimeout(400);
+  await p.click('#scn-tgt-apply');
+  await p.waitForTimeout(700);
+  const appliedPrice = await p.inputValue('input[data-scn-price="tracking"]');
+  check('Apply writes the allocated unit price into the table',
+    Number(appliedPrice) > 0, appliedPrice);
+  const appliedGm = Number((await p.$eval('#scn-summary .scn-tile-lead b', (e) => e.innerText)).replace(/[^0-9.]/g, ''));
+  check('the applied scenario reaches the target margin', appliedGm > 0 && appliedGm < 100, String(appliedGm));
+  const appliedRev = Number((await p.$eval('#scn-summary .scn-tile:nth-child(2) b', (e) => e.innerText)).replace(/[^0-9.]/g, ''));
+  check('the applied scenario bills exactly the target', Math.abs(appliedRev - 48000) < 1, String(appliedRev));
+
+  // The target box is money, so it obeys the display currency like everything else.
+  await p.selectOption('#currency-select', 'USD');
+  await p.waitForTimeout(800);
+  const usdTarget = Number(await tgtBox.inputValue());
+  check('the target amount converts with the display currency',
+    usdTarget > 0 && usdTarget < 48000, String(usdTarget));
+  await p.selectOption('#currency-select', 'ZAR');
+  await p.waitForTimeout(800);
+  check('the target is stored in ZAR', Math.abs(Number(await tgtBox.inputValue()) - 48000) < 1,
+    await tgtBox.inputValue());
+  await p.click('#scn-reset');
+  await p.waitForTimeout(450);
+  check('reset clears the target too', (await tgtBox.inputValue()) === '', await tgtBox.inputValue());
+
   // REGRESSION: the rows used to be rebuilt on every keystroke, which destroyed
   // the input being typed in — focus was lost and only the first digit landed.
   await p.click('#scn-reset');

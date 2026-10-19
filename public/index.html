@@ -248,6 +248,39 @@
             schedules. Nothing here changes the quote; it is a sandbox for answering “can I make this work?”.
           </p>
 
+          <h3 class="scn-h3" style="margin-top:0">Work back from a target</h3>
+          <p class="note">
+            The client has named a price. Enter it and the planner splits it across the selected
+            products and shows what margin is left. <strong>Apply</strong> writes the resulting unit
+            prices into the table below, where you can still adjust any single product by hand.
+          </p>
+          <div class="scn-controls">
+            <label class="scn-field">
+              <span>Client will pay</span>
+              <input id="scn-tgt-amt" type="number" min="0" step="any" placeholder="0.00">
+              <small id="scn-tgt-cur"></small>
+            </label>
+            <label class="scn-field">
+              <span>Which is</span>
+              <select id="scn-tgt-mode" class="scn-select">
+                <option value="perVehicle">per vehicle / month</option>
+                <option value="total">total / month</option>
+              </select>
+            </label>
+            <label class="scn-field">
+              <span>Split across products by</span>
+              <select id="scn-tgt-basis" class="scn-select">
+                <option value="cost">cost — every product lands on the same GM</option>
+                <option value="list">list price — every product takes the same discount</option>
+              </select>
+            </label>
+            <div class="scn-actions">
+              <button id="scn-tgt-apply" class="btn btn-primary">↓ Apply to scenario</button>
+            </div>
+          </div>
+          <div id="scn-tgt-out"></div>
+
+          <h3 class="scn-h3">Per-product pricing</h3>
           <div class="scn-controls">
             <label class="scn-field">
               <span>Bundle discount %</span>

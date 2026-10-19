@@ -438,3 +438,21 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
 .card h2 > .btn { float: right; font-size: 11px; padding: 4px 9px; margin-top: -2px; }
 /* "/unit" qualifiers in the scenario table headers — present but not shouting */
 .scn-unit { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-mute); }
+
+/* Target allocator — "the client will pay X; make it work" */
+.scn-select {
+  font: inherit; font-size: 13px; padding: 7px 9px; border: 1px solid var(--line);
+  border-radius: var(--r-sm); background: var(--panel-2); color: var(--text); max-width: 290px;
+}
+.scn-select:focus { outline: none; border-color: var(--accent); box-shadow: var(--ring); }
+#scn-tgt-out { margin: var(--s3) 0 var(--s2); }
+.tgt-verdict {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px;
+  padding: 11px 13px; border-radius: var(--r-sm); border: 1px solid var(--line);
+  background: var(--panel-2); font-size: 13px; margin-bottom: var(--s2);
+}
+.tgt-verdict b { font-family: var(--mono); font-size: 16px; font-weight: 600; }
+.tgt-verdict .sep { color: var(--text-mute); }
+.tgt-ok   { border-left: 3px solid var(--good); }
+.tgt-warn { border-left: 3px solid var(--warn); }
+.tgt-bad  { border-left: 3px solid var(--bad); }
