@@ -530,6 +530,10 @@
 
       return {
         key: p.key, name: p.name, selected: line.selected,
+        // The basis travels with the row: marginal cost is per vehicle for some
+        // products and per user for others, so a bare number is not comparable
+        // across rows without it.
+        billing: p.billing, billingLabel: billingLabel(p.billing),
         revenue, marginalCost: p.marginalCost, monthlyCost, contribution, grossMargin,
         stepCount, stepWarning, floor50, floor60, effectivePrice: line.effectivePrice, floorStatus,
       };

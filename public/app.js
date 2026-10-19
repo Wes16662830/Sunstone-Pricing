@@ -103,7 +103,17 @@ function recompute() {
   renderAll();
 }
 
+// Every money column header carries a <span class="cur-tag">; this is the one
+// place that fills them. Table CELLS use cur() without a symbol — a symbol on
+// every row of a dense numeric table is noise — so the header is what tells the
+// reader which currency they are looking at, and it has to follow the selector.
+function renderCurrencyTags() {
+  const tag = `${curSym()} ${displayCurrency}`;
+  document.querySelectorAll('.cur-tag').forEach((el) => { el.textContent = tag; });
+}
+
 function renderAll() {
+  renderCurrencyTags();
   renderSubscription();
   renderHardware();
   renderImplementation();
@@ -505,7 +515,7 @@ function renderQuote() {
 
     <h3>Subscription Items</h3>
     <table>
-      <thead><tr><th>Product</th><th>Basis</th><th class="num">Qty</th><th class="num">Unit/mo</th><th class="num">Monthly ${displayCurrency}</th><th class="num">Annual ${displayCurrency}</th></tr></thead>
+      <thead><tr><th>Product</th><th>Basis</th><th class="num">Qty</th><th class="num">Unit/mo ${displayCurrency}</th><th class="num">Monthly ${displayCurrency}</th><th class="num">Annual ${displayCurrency}</th></tr></thead>
       <tbody>${subRows || '<tr><td colspan="6">No subscription items selected.</td></tr>'}
         <tr class="q-total"><td>Total subscription value (excl. VAT)</td><td></td><td></td><td></td><td class="num">${cur(q.subscriptionMonthly)}</td><td class="num">${cur(q.subscriptionAnnual)}</td></tr>
       </tbody>
@@ -821,7 +831,7 @@ function renderMargin() {
     if (!r.selected) tr.className = 'row-off';
     const warnColor = r.stepWarning.startsWith('⚠') ? 'color:var(--warn)' : '';
     tr.innerHTML = `
-      <td>${r.name}</td>
+      <td>${r.name}<span class="row-basis">${escapeHtml(r.billingLabel || '')}</span></td>
       <td>${r.selected ? '☑' : '☐'}</td>
       <td class="num">${cur(r.revenue)}</td>
       <td class="num">${cur(r.marginalCost, 0)}</td>
@@ -853,7 +863,7 @@ function renderMargin() {
     else if (r.floorStatus.includes('60%')) color = 'var(--warn)';
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${r.name}</td>
+      <td>${r.name}<span class="row-basis">${escapeHtml(r.billingLabel || '')}</span></td>
       <td class="num">${cur(r.marginalCost, 0)}</td>
       <td class="num">${cur(r.floor50)}</td>
       <td class="num">${cur(r.floor60)}</td>
@@ -1148,8 +1158,8 @@ function renderTarget() {
     <table class="data">
       <thead><tr>
         <th>Product</th><th class="num">Qty</th><th class="num">Share</th>
-        <th class="num">Price <span class="scn-unit">/unit</span></th><th class="num">Disc %</th>
-        <th class="num">Revenue <span class="scn-unit">/mo</span></th><th class="num">GM %</th><th>Status</th>
+        <th class="num">Price <span class="scn-unit">/unit</span> ${escapeHtml(curSym() + ' ' + displayCurrency)}</th><th class="num">Disc %</th>
+        <th class="num">Revenue <span class="scn-unit">/mo</span> ${escapeHtml(curSym() + ' ' + displayCurrency)}</th><th class="num">GM %</th><th>Status</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>

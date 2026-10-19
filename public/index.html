@@ -87,7 +87,7 @@
           <p class="note" id="sub-users-hint" style="display:none"></p>
           <table class="data" id="sub-table">
             <thead>
-              <tr><th>Include</th><th>Product</th><th>Billing</th><th class="num">Qty</th><th class="num">List/unit</th><th class="num">Effective/unit</th><th class="num">Monthly</th><th class="num">Annual</th></tr>
+              <tr><th>Include</th><th>Product</th><th>Billing</th><th class="num">Qty</th><th class="num">List/unit <span class="cur-tag"></span></th><th class="num">Effective/unit <span class="cur-tag"></span></th><th class="num">Monthly <span class="cur-tag"></span></th><th class="num">Annual <span class="cur-tag"></span></th></tr>
             </thead>
             <tbody id="sub-tbody"></tbody>
           </table>
@@ -128,7 +128,7 @@
       <div class="card">
         <h2>Hardware Items</h2>
         <table class="data" id="hw-table">
-          <thead><tr><th>Include</th><th>Item</th><th class="num">Qty</th><th class="num">Unit Sell</th><th class="num">Subtotal</th></tr></thead>
+          <thead><tr><th>Include</th><th>Item</th><th class="num">Qty</th><th class="num">Unit Sell <span class="cur-tag"></span></th><th class="num">Subtotal <span class="cur-tag"></span></th></tr></thead>
           <tbody id="hw-tbody"></tbody>
         </table>
         <p class="note">Every catalogued item appears here — tick to include and set the quantity. <strong>All quantities are editable</strong>, so you can build a hardware-only quote without touching Subscription or fleet composition. Wired rows (handsets / GPS / printer / fuel kits) default to the fleet composition; type a quantity to override, or clear the field to revert to the fleet figure. Add or edit items in Config → Hardware Catalog.</p>
@@ -137,7 +137,7 @@
       <div class="card">
         <h2>Installation <button class="btn cfg-add" id="hw-add-install">＋ Add one-off</button></h2>
         <table class="data" id="hw-install-table">
-          <thead><tr><th>Scenario</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Subtotal</th></tr></thead>
+          <thead><tr><th>Scenario</th><th class="num">Qty</th><th class="num">Rate <span class="cur-tag"></span></th><th class="num">Subtotal <span class="cur-tag"></span></th></tr></thead>
           <tbody id="hw-install-tbody"></tbody>
         </table>
         <p class="note">The first rows are auto-computed from your hardware selections; every configured installation item then appears as a tickable row (set the quantity). Add installation items in Config → Installation Items, or use “＋ Add one-off” for a manual line not in the catalog.</p>
@@ -151,7 +151,7 @@
         <h2>Implementation Activities (time &amp; materials) <button class="btn" id="impl-reset" title="Discard your manual on/off choices and re-apply the suggestions for the current selection">↺ Reset suggestions</button></h2>
         <p class="note">Activities are <strong>suggested from the deal</strong>: core project work switches on once anything is selected, and each training row switches on when its product is on the quote — including Training&nbsp;—&nbsp;Fuel when fuel probe kits are on the Hardware tab. <strong>Tick or untick any row and it stays as you set it</strong>, even if the product selection changes later; “Reset suggestions” gives that control back. Training rows only bill when the matching product is selected on Subscription — shown greyed as “not billed” otherwise.</p>
         <table class="data" id="impl-table">
-          <thead><tr><th>On</th><th>Activity</th><th class="num">Hours</th><th>Senior?</th><th class="num">Rate/hr</th><th class="num">Discount %</th><th class="num">Total</th><th>Status</th></tr></thead>
+          <thead><tr><th>On</th><th>Activity</th><th class="num">Hours</th><th>Senior?</th><th class="num">Rate/hr <span class="cur-tag"></span></th><th class="num">Discount %</th><th class="num">Total <span class="cur-tag"></span></th><th>Status</th></tr></thead>
           <tbody id="impl-tbody"></tbody>
         </table>
         <table class="kv compact" id="impl-totals"></table>
@@ -218,7 +218,7 @@
         <div class="card">
           <h2>Per-Product Margin Breakdown</h2>
           <table class="data" id="margin-table">
-            <thead><tr><th>Product</th><th>Sel</th><th class="num">Revenue</th><th class="num">Marginal/lic</th><th class="num">Cost</th><th class="num">Contribution</th><th class="num">GM %</th><th>Step-Cost</th></tr></thead>
+            <thead><tr><th>Product</th><th>Sel</th><th class="num">Revenue <span class="cur-tag"></span></th><th class="num">Marginal / unit <span class="cur-tag"></span></th><th class="num">Cost <span class="cur-tag"></span></th><th class="num">Contribution <span class="cur-tag"></span></th><th class="num">GM %</th><th>Step-Cost</th></tr></thead>
             <tbody id="margin-tbody"></tbody>
           </table>
           <table class="kv compact" id="margin-totals"></table>
@@ -232,7 +232,7 @@
             <h2>Margin Floor Check</h2>
             <p class="note">Floor @50% GM = marginal×2; floor @60% GM = marginal÷0.4. Flags effective price below floor.</p>
             <table class="data" id="margin-floor">
-              <thead><tr><th>Product</th><th class="num">Marginal</th><th class="num">50% Floor</th><th class="num">60% Floor</th><th class="num">Effective</th><th>Status</th></tr></thead>
+              <thead><tr><th>Product</th><th class="num">Marginal / unit <span class="cur-tag"></span></th><th class="num">50% Floor <span class="cur-tag"></span></th><th class="num">60% Floor <span class="cur-tag"></span></th><th class="num">Effective <span class="cur-tag"></span></th><th>Status</th></tr></thead>
               <tbody id="margin-floor-tbody"></tbody>
             </table>
           </div>
@@ -305,12 +305,12 @@
             <thead>
               <tr>
                 <th>Product</th><th class="num">Qty</th>
-                <th class="num">List <span class="scn-unit">/unit</span></th>
+                <th class="num">List <span class="scn-unit">/unit</span> <span class="cur-tag"></span></th>
                 <th class="num">Disc %</th>
                 <th class="num">Your price <span class="scn-unit">/unit <span id="scn-cur-a"></span></span></th>
-                <th class="num">Revenue <span class="scn-unit">/mo</span></th>
-                <th class="num">Cost <span class="scn-unit">/mo</span></th>
-                <th class="num">Contribution</th><th class="num">GM %</th><th>Status</th>
+                <th class="num">Revenue <span class="scn-unit">/mo</span> <span class="cur-tag"></span></th>
+                <th class="num">Cost <span class="scn-unit">/mo</span> <span class="cur-tag"></span></th>
+                <th class="num">Contribution <span class="cur-tag"></span></th><th class="num">GM %</th><th>Status</th>
               </tr>
             </thead>
             <tbody id="scn-tbody"></tbody>
@@ -324,8 +324,8 @@
           <p class="note">The prices that matter in a negotiation — all <strong>per unit</strong>, in <span id="scn-cur-c"></span>. “Target” is the price that hits the product’s own target GM — that is list.</p>
           <table class="data" id="scn-floors">
             <thead>
-              <tr><th>Product</th><th class="num">Breakeven</th><th class="num">50% GM</th><th class="num">60% GM</th>
-                  <th class="num">Target</th><th class="num">Your price</th><th class="num">Max disc @50%</th></tr>
+              <tr><th>Product</th><th class="num">Breakeven <span class="cur-tag"></span></th><th class="num">50% GM <span class="cur-tag"></span></th><th class="num">60% GM <span class="cur-tag"></span></th>
+                  <th class="num">Target <span class="cur-tag"></span></th><th class="num">Your price <span class="cur-tag"></span></th><th class="num">Max disc @50%</th></tr>
             </thead>
             <tbody id="scn-floors-tbody"></tbody>
           </table>
@@ -335,7 +335,7 @@
           <h2>Pinned Scenarios</h2>
           <p class="note">Snapshots you have pinned, newest last. Compare them side by side, then take the one that works.</p>
           <table class="data" id="scn-pinned">
-            <thead><tr><th>Scenario</th><th class="num">Revenue/mo</th><th class="num">Cost/mo</th><th class="num">Contribution</th><th class="num">GM %</th><th class="num">Disc vs list</th><th></th></tr></thead>
+            <thead><tr><th>Scenario</th><th class="num">Revenue/mo <span class="cur-tag"></span></th><th class="num">Cost/mo <span class="cur-tag"></span></th><th class="num">Contribution <span class="cur-tag"></span></th><th class="num">GM %</th><th class="num">Disc vs list</th><th></th></tr></thead>
             <tbody id="scn-pinned-tbody"></tbody>
           </table>
         </div>
