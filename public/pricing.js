@@ -6,6 +6,13 @@
  * workbook, the workbook wins (see README "Discrepancies"). The most important
  * one: Fuel uses a 75% target GM (Config!C6 = 0.75 -> list R332), NOT 85%.
  *
+ * DELIBERATE DIVERGENCE FROM THE WORKBOOK — billing basis. The workbook bills
+ * every product per vehicle. Sunstone's published price list bills Digital
+ * Journey and Stock Master PER USER, and the business has confirmed the price
+ * list is correct. Those two therefore carry billing: 'perUser' here. Unit
+ * prices are unchanged; only the quantity basis differs, so every other
+ * workbook figure still reconciles. See test/verify.js and the README.
+ *
  * CONFIG IS NOW DATA, NOT CODE. DEFAULT_CONFIG below matches the workbook exactly
  * (so the verification suite still passes). At runtime the active config can be
  * replaced via setConfig() — the Config page saves an edited config to the server
@@ -28,11 +35,11 @@
     // Product pricing. listPrice = marginalCost / (1 - targetGM).
     // `key` is the stable id used across sheets; `quoteLabel` is what the client sees.
     products: [
-      { key: 'tracking',       name: 'Tracking',        quoteLabel: 'Tracking',        calcLabel: 'Tracking',           marginalCost: 83,  targetGM: 0.70, stepThreshold: 300 },
-      { key: 'fuel',           name: 'Fuel',            quoteLabel: 'Fuel',            calcLabel: 'Fuel plus tracking', marginalCost: 83,  targetGM: 0.75, stepThreshold: 300 },
-      { key: 'routeBuilder',   name: 'Route Builder',   quoteLabel: 'Route Builder',   calcLabel: 'Route Builder',      marginalCost: 50,  targetGM: 0.75, stepThreshold: 500 },
-      { key: 'digitalJourney', name: 'Digital Journey', quoteLabel: 'Digital Journey', calcLabel: 'Digital Journey',    marginalCost: 83,  targetGM: 0.75, stepThreshold: 300 },
-      { key: 'stockMaster',    name: 'Stock Master',    quoteLabel: 'Stock Master',    calcLabel: 'Stock Master',       marginalCost: 250, targetGM: 0.75, stepThreshold: 100 },
+      { key: 'tracking',       name: 'Tracking',        quoteLabel: 'Tracking',        calcLabel: 'Tracking',           marginalCost: 83,  targetGM: 0.70, stepThreshold: 300, billing: 'perVehicle' },
+      { key: 'fuel',           name: 'Fuel',            quoteLabel: 'Fuel',            calcLabel: 'Fuel plus tracking', marginalCost: 83,  targetGM: 0.75, stepThreshold: 300, billing: 'perVehicle' },
+      { key: 'routeBuilder',   name: 'Route Builder',   quoteLabel: 'Route Builder',   calcLabel: 'Route Builder',      marginalCost: 50,  targetGM: 0.75, stepThreshold: 500, billing: 'perVehicle' },
+      { key: 'digitalJourney', name: 'Digital Journey', quoteLabel: 'Digital Journey', calcLabel: 'Digital Journey',    marginalCost: 83,  targetGM: 0.75, stepThreshold: 300, billing: 'perUser' },
+      { key: 'stockMaster',    name: 'Stock Master',    quoteLabel: 'Stock Master',    calcLabel: 'Stock Master',       marginalCost: 250, targetGM: 0.75, stepThreshold: 100, billing: 'perUser' },
     ],
     stepCost: 25000, // R/mo per step (advisory)
 
@@ -171,7 +178,22 @@
     cfg = cfg || {};
     const d = DEFAULT_CONFIG;
     return {
-      products: (Array.isArray(cfg.products) && cfg.products.length ? cfg.products : d.products).map(normalizeProduct),
+      // A config saved before `billing` existed has no such field on its
+      // products, and normalizeProduct would quietly default those to
+      // per-vehicle — silently undoing the per-user basis for Digital Journey
+      // and Stock Master on any installation with a saved config. Inherit the
+      // default basis by key when the saved product does not state one. An
+      // explicit value (including 'perVehicle') is always kept, so a deliberate
+      // change in Config still wins.
+      products: (Array.isArray(cfg.products) && cfg.products.length ? cfg.products : d.products)
+        .map((p) => {
+          if (p && !p.billing) {
+            const def = d.products.find((x) => x.key === p.key);
+            if (def) return normalizeProduct(Object.assign({}, p, { billing: def.billing }));
+          }
+          return p;
+        })
+        .map(normalizeProduct),
       stepCost: num(cfg.stepCost, d.stepCost),
       bundleSchedule: (cfg.bundleSchedule && Object.keys(cfg.bundleSchedule).length) ? cfg.bundleSchedule : clone(d.bundleSchedule),
       volumeTiers: (Array.isArray(cfg.volumeTiers) && cfg.volumeTiers.length ? cfg.volumeTiers : clone(d.volumeTiers))

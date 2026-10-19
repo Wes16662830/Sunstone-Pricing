@@ -18,6 +18,15 @@ function check(label, got, want, tol = APPROX) {
   else { fail++; console.log(`  ✗ ${label}\n        got:  ${got}\n        want: ${want}`); }
 }
 
+// BILLING BASIS — deliberate divergence from the workbook.
+// The workbook bills every product per vehicle. Sunstone's published price list
+// bills Digital Journey and Stock Master PER USER, and the business has
+// confirmed the price list is correct, so the engine follows the price list.
+// To keep these scenarios a true transcription check, each one passes a user
+// count EQUAL to its vehicle count: the quantity is then numerically identical
+// to the workbook's, so every figure below still reconciles cell-for-cell while
+// the basis itself is exercised separately at the end of this file.
+
 // ---------------------------------------------------------------------------
 // Scenario 1: Zambia Sugar (Calculator sheet example)
 // 20 vehicles, Tracking + Fuel + Route Builder + Digital Journey selected.
@@ -25,7 +34,8 @@ function check(label, got, want, tol = APPROX) {
 console.log('\n[Scenario] Zambia Sugar — Calculator/Quote/Implementation/Margin sheets');
 {
   const selected = { tracking: true, fuel: true, routeBuilder: true, digitalJourney: true, stockMaster: false };
-  const sub = P.calcSubscription({ vehicles: 20, selected });
+  // users === vehicles, so per-user lines reconcile with the workbook (see note above).
+  const sub = P.calcSubscription({ vehicles: 20, users: 20, selected });
 
   // Config-derived list prices (Config!D5:D9)
   check('Tracking list price = 276.6667', sub.lines[0].listPrice, 276.66666666666663);
@@ -121,7 +131,7 @@ console.log('\n[Scenario] Zambia Sugar — Calculator/Quote/Implementation/Margi
 console.log('\n[Scenario] Scenarios sheet A/B/C — subscription revenue & GM');
 {
   // Scenario A: Tracking-only Entry, 50 vehicles
-  const A = P.calcSubscription({ vehicles: 50, selected: { tracking: true } });
+  const A = P.calcSubscription({ vehicles: 50, users: 50, selected: { tracking: true } });
   check('A bundle multiplier = 1', A.bundle.multiplier, 1);
   check('A volume tier = SMB', A.volume.name, 'SMB');
   check('A monthly subscription = 13833.333', A.totalMonthly, 13833.333333333332);
@@ -133,7 +143,7 @@ console.log('\n[Scenario] Scenarios sheet A/B/C — subscription revenue & GM');
   check('A effective GM = 0.70', imA.totalGrossMargin, 0.7);
 
   // Scenario B: Fuel + Route Builder + DJ, 250 vehicles
-  const B = P.calcSubscription({ vehicles: 250, selected: { fuel: true, routeBuilder: true, digitalJourney: true } });
+  const B = P.calcSubscription({ vehicles: 250, users: 250, selected: { fuel: true, routeBuilder: true, digitalJourney: true } });
   check('B products = 3', B.productCount, 3);
   check('B bundle multiplier = 0.9', B.bundle.multiplier, 0.9);
   check('B volume tier = Upper mid', B.volume.name, 'Upper mid');
@@ -148,7 +158,7 @@ console.log('\n[Scenario] Scenarios sheet A/B/C — subscription revenue & GM');
   check('B effective GM = 0.691358', imB.totalGrossMargin, 0.691358024691358);
 
   // Scenario C: Full Suite Enterprise (4-prod: Fuel+RB+DJ+SM), 1200 vehicles
-  const C = P.calcSubscription({ vehicles: 1200, selected: { fuel: true, routeBuilder: true, digitalJourney: true, stockMaster: true } });
+  const C = P.calcSubscription({ vehicles: 1200, users: 1200, selected: { fuel: true, routeBuilder: true, digitalJourney: true, stockMaster: true } });
   check('C products = 4', C.productCount, 4);
   check('C bundle multiplier = 0.85', C.bundle.multiplier, 0.85);
   check('C volume tier = Large', C.volume.name, 'Large');
@@ -203,6 +213,55 @@ console.log('\n[Scenario] Hardware sell prices, kit composition, install & PMT')
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Billing basis: Digital Journey and Stock Master bill PER USER; the rest bill
+// per vehicle. Asserted with users != vehicles so the two cannot be confused.
+// ---------------------------------------------------------------------------
+console.log('\n[Scenario] Billing basis — per user vs per vehicle');
+{
+  const selected = { tracking: true, fuel: true, routeBuilder: true, digitalJourney: true, stockMaster: true };
+  const s1 = P.calcSubscription({ vehicles: 100, users: 10, selected });
+  const line = (k) => s1.lines.find((l) => l.key === k);
+
+  check('Tracking bills per vehicle', line('tracking').billingLabel, 'per vehicle');
+  check('Fuel bills per vehicle', line('fuel').billingLabel, 'per vehicle');
+  check('Route Builder bills per vehicle', line('routeBuilder').billingLabel, 'per vehicle');
+  check('Digital Journey bills per user', line('digitalJourney').billingLabel, 'per user');
+  check('Stock Master bills per user', line('stockMaster').billingLabel, 'per user');
+
+  check('Tracking qty follows vehicles', line('tracking').qty, 100);
+  check('Digital Journey qty follows users', line('digitalJourney').qty, 10);
+  check('Stock Master qty follows users', line('stockMaster').qty, 10);
+
+  // Changing the user count must move the per-user lines and nothing else.
+  const s2 = P.calcSubscription({ vehicles: 100, users: 20, selected });
+  check('doubling users doubles Digital Journey revenue',
+    s2.lines.find((l) => l.key === 'digitalJourney').monthly,
+    line('digitalJourney').monthly * 2);
+  check('doubling users leaves Tracking revenue alone',
+    s2.lines.find((l) => l.key === 'tracking').monthly, line('tracking').monthly);
+
+  // With no users, the per-user lines bill nothing even though they are ticked.
+  const s0 = P.calcSubscription({ vehicles: 100, users: 0, selected });
+  check('zero users -> Digital Journey bills nothing',
+    s0.lines.find((l) => l.key === 'digitalJourney').monthly, 0);
+  check('zero users -> Stock Master bills nothing',
+    s0.lines.find((l) => l.key === 'stockMaster').monthly, 0);
+  check('zero users -> per-vehicle lines still bill',
+    s0.lines.find((l) => l.key === 'tracking').monthly > 0, true);
+
+  // Unit economics are unchanged by the basis — only the quantity differs.
+  check('Digital Journey list price still 332', line('digitalJourney').listPrice, 332);
+  check('Stock Master list price still 1000', line('stockMaster').listPrice, 1000);
+
+  // Margin follows the same quantity, or GM would be wrong for these two.
+  const im = P.calcInternalMargin(s1);
+  const dj = im.rows.find((r) => r.key === 'digitalJourney');
+  check('Digital Journey cost uses the user count', dj.monthlyCost, 83 * 10);
+  check('Digital Journey GM is computed on the per-user line',
+    dj.grossMargin, (dj.revenue - dj.monthlyCost) / dj.revenue);
+}
+
 console.log(`\n${'='.repeat(50)}`);
 console.log(`RESULT: ${pass} passed, ${fail} failed`);
 console.log('='.repeat(50));

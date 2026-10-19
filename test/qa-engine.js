@@ -227,6 +227,41 @@ P.setConfig(P.getDefaultConfig());
   check('hardware options leak no cost/margin keys', optLeaked.length === 0, optLeaked.join(','));
 }
 
+console.log('\n=== F2. Billing basis survives a legacy saved config ===');
+P.setConfig(P.getDefaultConfig());
+{
+  // A config saved before `billing` existed carries no such field. Without the
+  // inherit-by-key step in mergeConfig those products would default to
+  // per-vehicle, silently undoing the per-user basis for Digital Journey and
+  // Stock Master on every installation that has ever saved a config.
+  const legacy = JSON.parse(JSON.stringify(P.getDefaultConfig()));
+  legacy.products.forEach((p) => { delete p.billing; });
+  P.setConfig(legacy);
+  const by = (k) => P.getConfig().products.find((p) => p.key === k).billing;
+  check('legacy config still bills Digital Journey per user', by('digitalJourney') === 'perUser', by('digitalJourney'));
+  check('legacy config still bills Stock Master per user', by('stockMaster') === 'perUser', by('stockMaster'));
+  check('legacy config leaves Tracking per vehicle', by('tracking') === 'perVehicle', by('tracking'));
+  const s = P.calcSubscription({ vehicles: 100, users: 10, selected: { digitalJourney: true } });
+  check('legacy config charges Digital Journey by users, not vehicles',
+    s.lines.find((l) => l.key === 'digitalJourney').qty === 10);
+
+  // A deliberate change in Config must still win over the default.
+  const deliberate = JSON.parse(JSON.stringify(P.getDefaultConfig()));
+  deliberate.products.find((p) => p.key === 'stockMaster').billing = 'perVehicle';
+  P.setConfig(deliberate);
+  check('an explicit billing basis is never overwritten by the default',
+    P.getConfig().products.find((p) => p.key === 'stockMaster').billing === 'perVehicle');
+
+  // A product that exists only in the saved config (added in Config) has no
+  // default to inherit from and must fall back safely.
+  const added = JSON.parse(JSON.stringify(P.getDefaultConfig()));
+  added.products.push({ key: 'custom1', name: 'Custom', marginalCost: 10, targetGM: 0.5 });
+  P.setConfig(added);
+  check('a product with no default falls back to per vehicle',
+    P.getConfig().products.find((p) => p.key === 'custom1').billing === 'perVehicle');
+  P.setConfig(P.getDefaultConfig());
+}
+
 console.log('\n=== H3. Scenario planner (calcScenario) ===');
 P.setConfig(P.getDefaultConfig());
 {
