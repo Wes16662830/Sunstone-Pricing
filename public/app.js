@@ -37,6 +37,14 @@ function fxDivisor() { return displayCurrency === 'ZAR' ? 1 : (Number(fxRates[di
 function curSym() { return (CURRENCIES[displayCurrency] || { symbol: '' }).symbol; }
 const cur = (n, dp = 2) => fmt((Number(n) || 0) / fxDivisor(), dp);
 const fmtR = (n, dp = 2) => curSym() + ' ' + cur(n, dp);
+// Plain (unformatted) conversions for NUMBER INPUTS, where a grouped string
+// like "1,234.00" would be rejected by the control. Everything is stored and
+// computed in ZAR; only what the user sees and types is in the display
+// currency, so every typed figure must come back through fxToZar.
+const fxToDisplay = (zar) => (Number(zar) || 0) / fxDivisor();
+const fxToZar = (shown) => (Number(shown) || 0) * fxDivisor();
+// Trim to 2dp without trailing zeros, so an input shows 200 rather than 200.00.
+const fxInputValue = (zar) => String(Math.round(fxToDisplay(zar) * 100) / 100);
 
 // --- Deal state -------------------------------------------------------------
 function defaultDeal() {
@@ -927,30 +935,77 @@ function renderScenario() {
   document.getElementById('scn-volume-auto').textContent =
     `schedule: ${pct(s.volume.auto)} (${s.volume.name})`;
 
-  // Per-product rows
+  // Say which currency the editable boxes are in. Everything is computed in
+  // ZAR; this table shows and accepts the display currency, so the label has to
+  // be unambiguous or a price typed in USD reads as Rands.
+  const curTag = `(${curSym()} ${displayCurrency})`;
+  ['scn-cur-a', 'scn-cur-c'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = curTag;
+  });
+  const un = document.getElementById('scn-unit-note');
+  if (un) {
+    un.innerHTML = `Prices are <strong>per unit</strong> in <strong>${curSym()} ${displayCurrency}</strong>` +
+      (displayCurrency === 'ZAR' ? '' :
+        ` — converted from Rands at the configured rate, so a price typed here is in ${displayCurrency}`) +
+      '. Revenue is that unit price × quantity.';
+  }
+
+  // Per-product rows.
+  //
+  // These rows are REBUILT ONLY WHEN THE SET OF PRODUCTS CHANGES. Rebuilding on
+  // every keystroke destroys the <input> being typed in, which drops focus and
+  // swallows the rest of the number. Once the rows exist, only the computed
+  // cells are patched; the inputs are left alone unless they are not focused.
   const tb = document.getElementById('scn-tbody');
   document.getElementById('scn-empty').style.display = rows.length ? 'none' : '';
-  tb.innerHTML = '';
+  const sig = rows.map((r) => r.key).join('|') + '#' + displayCurrency;
+  if (tb.dataset.sig !== sig) {
+    tb.dataset.sig = sig;
+    tb.innerHTML = rows.map((r) => `
+      <tr data-scn-row="${r.key}">
+        <td>${escapeHtml(r.name)}<span class="scn-basis">${escapeHtml(r.billingLabel)}</span></td>
+        <td class="num" data-c="qty"></td>
+        <td class="num" data-c="list"></td>
+        <td class="num"><input class="cell-input num scn-in" type="number" min="0" max="100" step="0.5"
+            data-scn-disc="${r.key}"></td>
+        <td class="num"><input class="cell-input num scn-in" type="number" min="0" step="any"
+            data-scn-price="${r.key}"></td>
+        <td class="num" data-c="rev"></td>
+        <td class="num" data-c="cost"></td>
+        <td class="num" data-c="contrib"></td>
+        <td class="num" data-c="gm"></td>
+        <td data-c="status"></td>
+      </tr>`).join('');
+  }
   rows.forEach((r) => {
+    const tr = tb.querySelector(`tr[data-scn-row="${r.key}"]`);
+    if (!tr) return;
     const o = sc.productOverride[r.key] || {};
     const st = SCN_STATUS[r.floorStatus] || SCN_STATUS['n/a'];
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${escapeHtml(r.name)}<span class="scn-basis">${escapeHtml(r.billingLabel)}</span></td>
-      <td class="num">${r.qty}</td>
-      <td class="num">${cur(r.listPrice)}</td>
-      <td class="num"><input class="cell-input num scn-in" type="number" min="0" max="100" step="0.5"
-          data-scn-disc="${r.key}" placeholder="${(r.discount * 100).toFixed(1)}"
-          value="${o.discount === undefined || o.discount === null ? '' : Math.round(o.discount * 1000) / 10}"></td>
-      <td class="num"><input class="cell-input num scn-in" type="number" min="0" step="1"
-          data-scn-price="${r.key}" placeholder="${r.autoPrice.toFixed(2)}"
-          value="${o.price === undefined || o.price === null ? '' : o.price}"></td>
-      <td class="num">${cur(r.revenue)}</td>
-      <td class="num">${cur(r.monthlyCost)}${r.stepMonthly && sc.includeStepCost ? `<span class="scn-basis">incl. ${cur(r.stepMonthly, 0)} step</span>` : ''}</td>
-      <td class="num">${cur(r.contribution)}</td>
-      <td class="num" style="color:${gmColor(r.grossMargin)};font-weight:600">${pct(r.grossMargin)}</td>
-      <td style="color:${st.color}">${st.label}${r.stepCount && !sc.includeStepCost ? `<span class="scn-basis">${r.stepCount} step(s) ignored</span>` : ''}</td>`;
-    tb.appendChild(tr);
+    const cell = (n) => tr.querySelector(`[data-c="${n}"]`);
+    cell('qty').textContent = r.qty;
+    cell('list').textContent = cur(r.listPrice);
+    cell('rev').textContent = cur(r.revenue);
+    cell('cost').innerHTML = cur(r.monthlyCost) +
+      (r.stepMonthly && sc.includeStepCost ? `<span class="scn-basis">incl. ${cur(r.stepMonthly, 0)} step</span>` : '');
+    cell('contrib').textContent = cur(r.contribution);
+    cell('gm').textContent = pct(r.grossMargin);
+    cell('gm').style.color = gmColor(r.grossMargin);
+    cell('gm').style.fontWeight = '600';
+    cell('status').innerHTML = st.label +
+      (r.stepCount && !sc.includeStepCost ? `<span class="scn-basis">${r.stepCount} step(s) ignored</span>` : '');
+    cell('status').style.color = st.color;
+
+    // Inputs: placeholders always reflect the schedule, values only when the
+    // user is not currently typing in that box.
+    const di = tr.querySelector('[data-scn-disc]');
+    const pi = tr.querySelector('[data-scn-price]');
+    di.placeholder = (r.discount * 100).toFixed(1);
+    pi.placeholder = fxInputValue(r.autoPrice);
+    if (di !== live) di.value = (o.discount === undefined || o.discount === null) ? '' : String(Math.round(o.discount * 1000) / 10);
+    // Prices are STORED IN ZAR and SHOWN in the display currency.
+    if (pi !== live) pi.value = (o.price === undefined || o.price === null) ? '' : fxInputValue(o.price);
   });
 
   // Deal-level summary
@@ -990,6 +1045,20 @@ function renderScenario() {
   renderPinned();
 }
 
+// Format a pinned scenario's description in the CURRENT display currency.
+// `note` is the legacy string form kept for scenarios pinned before this was
+// stored structurally; those cannot be re-expressed, so they are shown as-is.
+function pinnedNote(p) {
+  if (!Array.isArray(p.bits)) return p.note || 'schedule pricing';
+  if (!p.bits.length) return 'schedule pricing';
+  return p.bits.map((b) => {
+    if (b.t === 'price') return `${b.label} @ ${fmtR(b.zar)}/unit`;
+    if (b.t === 'disc') return `${b.label} \u2212${pct(b.v)}`;
+    if (b.t === 'pct') return `${b.label} ${pct(b.v)}`;
+    return b.label;
+  }).join(' \u00b7 ');
+}
+
 function renderPinned() {
   const sc = ensureScenario();
   const card = document.getElementById('scn-pinned-card');
@@ -999,7 +1068,7 @@ function renderPinned() {
   sc.pinned.forEach((p, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${escapeHtml(p.name)}<span class="scn-basis">${escapeHtml(p.note || '')}</span></td>
+      <td>${escapeHtml(p.name)}<span class="scn-basis">${escapeHtml(pinnedNote(p))}</span></td>
       <td class="num">${fmtR(p.revenue)}</td>
       <td class="num">${fmtR(p.cost)}</td>
       <td class="num">${fmtR(p.contribution)}</td>
@@ -1017,21 +1086,26 @@ function pinScenario() {
   const name = prompt('Name this scenario', `Option ${sc.pinned.length + 1}`);
   if (name === null) return;
   // Describe what makes this scenario different, so a pinned row still means
-  // something an hour later.
+  // something an hour later. Stored STRUCTURALLY with money in ZAR, never as a
+  // pre-formatted string: a note that baked in "$100/unit" at pin time would
+  // still say dollars after switching the display back to Rands.
   const bits = [];
-  if (sc.bundleOverride !== null) bits.push(`bundle ${pct(sc.bundleOverride)}`);
-  if (sc.volumeOverride !== null) bits.push(`volume ${pct(sc.volumeOverride)}`);
+  if (sc.bundleOverride !== null) bits.push({ t: 'pct', label: 'bundle', v: sc.bundleOverride });
+  if (sc.volumeOverride !== null) bits.push({ t: 'pct', label: 'volume', v: sc.volumeOverride });
   Object.keys(sc.productOverride).forEach((k) => {
     const o = sc.productOverride[k] || {};
     const row = s.rows.find((r) => r.key === k);
     if (!row || !row.selected) return;
-    if (o.price !== undefined && o.price !== null && o.price !== '') bits.push(`${row.name} @ ${cur(o.price)}`);
-    else if (o.discount !== undefined && o.discount !== null) bits.push(`${row.name} −${pct(o.discount)}`);
+    if (o.price !== undefined && o.price !== null && o.price !== '') {
+      bits.push({ t: 'price', label: row.name, zar: o.price });
+    } else if (o.discount !== undefined && o.discount !== null) {
+      bits.push({ t: 'disc', label: row.name, v: o.discount });
+    }
   });
-  if (sc.includeStepCost) bits.push('incl. step costs');
+  if (sc.includeStepCost) bits.push({ t: 'flag', label: 'incl. step costs' });
   sc.pinned.push({
     name: (name || '').trim() || `Option ${sc.pinned.length + 1}`,
-    note: bits.join(' · ') || 'schedule pricing',
+    bits,
     revenue: s.totalRevenue, cost: s.totalCost, contribution: s.totalContribution,
     gm: s.totalGrossMargin, discount: s.effectiveDiscount,
   });
@@ -1067,7 +1141,8 @@ function wireScenario() {
       o.discount = v === '' ? null : (Number(v) || 0) / 100;
       o.price = null;
     } else {
-      o.price = v === '' ? null : Math.max(0, Number(v) || 0);
+      // The box is in the DISPLAY currency; the engine works in ZAR.
+      o.price = v === '' ? null : Math.max(0, fxToZar(v));
       o.discount = null;
     }
     if (o.discount === null && o.price === null) delete sc.productOverride[key];

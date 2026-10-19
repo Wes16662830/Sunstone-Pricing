@@ -384,20 +384,124 @@ function check(name, cond, detail) {
   const gmDisc = await gmNow();
   check('discount override changes GM', gmDisc !== gmAuto, `${gmAuto} vs ${gmDisc}`);
 
+  // REGRESSION: the rows used to be rebuilt on every keystroke, which destroyed
+  // the input being typed in — focus was lost and only the first digit landed.
+  await p.click('#scn-reset');
+  await p.waitForTimeout(400);
+  const priceBox = p.locator('input[data-scn-price="tracking"]');
+  await priceBox.click();
+  for (const ch of '237') { await p.keyboard.type(ch); await p.waitForTimeout(150); }
+  await p.waitForTimeout(400);
+  check('a multi-digit price can be typed without losing the box',
+    (await priceBox.inputValue()) === '237', await priceBox.inputValue());
+  check('the price input keeps focus while typing',
+    await priceBox.evaluate((el) => el === document.activeElement));
+
+  // Prices are per unit, and in the DISPLAY currency — the engine works in ZAR,
+  // so a figure typed under USD must be read as USD, not as Rands.
+  const trkPriceRow = () => p.locator('#scn-tbody tr').filter({ hasText: 'Tracking' }).first().innerText();
+  const zarRow = await trkPriceRow();
+  check('revenue is unit price x quantity', /28[,.]440/.test(zarRow), zarRow.replace(/\n/g, ' '));
+  await p.selectOption('#currency-select', 'USD');
+  await p.waitForTimeout(700);
+  const usdShown = Number(await priceBox.inputValue());
+  check('switching currency converts the price shown', usdShown > 0 && usdShown < 237, String(usdShown));
+  await priceBox.fill('100');
+  await p.waitForTimeout(500);
+  const usdRow = await trkPriceRow();
+  check('a price typed under USD is read as USD', /12[,.]000/.test(usdRow), usdRow.replace(/\n/g, ' '));
+  await p.selectOption('#currency-select', 'ZAR');
+  await p.waitForTimeout(700);
+  const backInZar = Number(await priceBox.inputValue());
+  check('the stored price is held in ZAR, not the display currency',
+    backInZar > 1000, String(backInZar));
+  check('headers state the per-unit basis',
+    /\/unit/.test(await p.$eval('#scn-table thead', (e) => e.innerText)));
+  check('the planner names the currency being typed in',
+    /per unit/i.test(await p.$eval('#scn-unit-note', (e) => e.innerText)));
+  await p.click('#scn-reset');
+  await p.waitForTimeout(400);
+  // Put the override back: the pin test below expects a scenario that differs
+  // from schedule pricing, otherwise there is nothing for it to record.
+  await p.locator('input[data-scn-disc="tracking"]').fill('25');
+  await p.waitForTimeout(450);
+
+  // NO MIXED CURRENCIES. Every money figure on the planner — table cells,
+  // summary tiles, negotiation floors, the editable price box and the pinned
+  // descriptions — must re-express together when the display currency changes.
+  // One figure left in Rands beside converted ones is the bug this guards.
+  await p.locator('input[data-scn-price="tracking"]').fill('200');
+  await p.waitForTimeout(500);
+  const moneyCells = async () => p.evaluate(() => {
+    const n = (t) => Number(String(t).replace(/[^0-9.\-]/g, '')) || 0;
+    const out = [];
+    document.querySelectorAll('#scn-tbody tr').forEach((r) => {
+      const td = [...r.querySelectorAll('td')];
+      [2, 5, 6, 7].forEach((i) => td[i] && out.push(n(td[i].innerText.split('\n')[0])));
+    });
+    document.querySelectorAll('#scn-summary .scn-tile b').forEach((e) => {
+      if (!/%/.test(e.innerText)) out.push(n(e.innerText));
+    });
+    document.querySelectorAll('#scn-floors-tbody tr').forEach((r) => {
+      const td = [...r.querySelectorAll('td')];
+      [1, 2, 3, 4, 5].forEach((i) => td[i] && out.push(n(td[i].innerText)));
+    });
+    out.push(n(document.querySelector('input[data-scn-price="tracking"]').value));
+    return out;
+  });
+  const inZar = await moneyCells();
+  await p.selectOption('#currency-select', 'USD');
+  await p.waitForTimeout(800);
+  const inUsd = await moneyCells();
+  check('the same money figures are shown in both currencies', inZar.length === inUsd.length,
+    `${inZar.length} vs ${inUsd.length}`);
+  const ratios = inZar.map((v, i) => (v && inUsd[i]) ? v / inUsd[i] : null).filter((r) => r !== null);
+  check('every money figure converts, none left behind', ratios.length > 10, String(ratios.length));
+  const spread = Math.max(...ratios) - Math.min(...ratios);
+  check('all money figures share ONE exchange rate (no mixing)', spread < 0.05,
+    `rates ${Math.min(...ratios).toFixed(2)}..${Math.max(...ratios).toFixed(2)}`);
+  // Percentages are ratios and must NOT move with the currency.
+  const gmUsd = await p.$eval('#scn-summary .scn-tile-lead b', (e) => e.innerText);
+  await p.selectOption('#currency-select', 'ZAR');
+  await p.waitForTimeout(800);
+  check('gross margin is unchanged by the display currency',
+    (await p.$eval('#scn-summary .scn-tile-lead b', (e) => e.innerText)) === gmUsd, gmUsd);
+  await p.click('#scn-reset');
+  await p.waitForTimeout(400);
+  await p.locator('input[data-scn-disc="tracking"]').fill('25');
+  await p.waitForTimeout(450);
+
   // Pin it, so scenarios can be compared.
   await p.click('#scn-pin');
   await p.waitForTimeout(500);
   check('pinned scenario is listed', (await p.locator('#scn-pinned-tbody tr').count()) === 1);
   const pinTxt = await p.$eval('#scn-pinned-tbody', (e) => e.innerText);
   check('pinned row records what made it different', /Tracking/.test(pinTxt), pinTxt.replace(/\n/g, ' '));
+  // A pinned description must not freeze the symbol it was created under.
+  await p.locator('input[data-scn-price="fuel"]').fill('250');
+  await p.waitForTimeout(450);
+  await p.click('#scn-pin');
+  await p.waitForTimeout(500);
+  const pinZar = await p.$eval('#scn-pinned-tbody', (e) => e.innerText);
+  await p.selectOption('#currency-select', 'USD');
+  await p.waitForTimeout(800);
+  const pinUsd = await p.$eval('#scn-pinned-tbody', (e) => e.innerText);
+  check('a pinned price is described in Rands under ZAR', /R\s*250/.test(pinZar), pinZar.replace(/\n/g, ' ').slice(0, 120));
+  check('the same pin is described in dollars under USD',
+    /\$/.test(pinUsd) && !/R\s*250/.test(pinUsd), pinUsd.replace(/\n/g, ' ').slice(0, 120));
+  await p.selectOption('#currency-select', 'ZAR');
+  await p.waitForTimeout(700);
 
   // Reset returns to schedule pricing but keeps the pins.
+  const pinsBeforeReset = await p.locator('#scn-pinned-tbody tr').count();
   await p.click('#scn-reset');
   await p.waitForTimeout(450);
   check('reset restores the schedule GM', Math.abs((await gmNow()) - gmAuto) < 0.05, `${await gmNow()} vs ${gmAuto}`);
   check('reset clears the per-product inputs',
     (await p.inputValue('input[data-scn-disc="tracking"]')) === '');
-  check('reset keeps pinned scenarios', (await p.locator('#scn-pinned-tbody tr').count()) === 1);
+  check('reset keeps pinned scenarios',
+    (await p.locator('#scn-pinned-tbody tr').count()) === pinsBeforeReset,
+    `${pinsBeforeReset} -> ${await p.locator('#scn-pinned-tbody tr').count()}`);
 
   // Step costs are the thing that quietly ruins a big deal.
   await p.click('.tab[data-tab="subscription"]');
