@@ -72,6 +72,24 @@ live. Bundle and volume discounts can be overridden too — leaving a box blank
 means "use the schedule", which is deliberately **not** the same as entering 0
 (an explicit no-discount).
 
+**Work back from a target.** When the client has named a price rather than asked
+for a discount, enter it at the top of the planner — either **per vehicle per
+month** or as the **whole monthly bill** — and it is split across the selected
+products, with the resulting margin shown before you commit. **Apply** writes
+those unit prices into the table below, where any single product can still be
+adjusted by hand.
+
+The split is your choice of two, because "fairly" means two different things:
+
+| Basis | Divides the total by | Result |
+|-------|----------------------|--------|
+| **Cost** | what each product costs to deliver | every product lands on the **same gross margin** — each takes an equal share of the pain |
+| **List price** | each product's list revenue | every product takes the **same discount** — relative prices are preserved |
+
+Both reach the same total and the same blended margin; only the split between
+products differs. A product with zero quantity (a per-user product with no
+users) is reported as skipped rather than silently absorbing budget.
+
 A *How low can you go?* table gives the four prices that matter per product:
 breakeven, the 50% and 60% GM floors, and the target price (which is list — the
 price that hits the product's own target GM), plus the largest discount that

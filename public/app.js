@@ -882,6 +882,9 @@ function ensureScenario() {
   if (!('bundleOverride' in d)) d.bundleOverride = null;
   if (!('volumeOverride' in d)) d.volumeOverride = null;
   if (!('includeStepCost' in d)) d.includeStepCost = false;
+  if (!d.target || typeof d.target !== 'object') {
+    d.target = { amount: null, mode: 'perVehicle', basis: 'cost' };
+  }
   return d;
 }
 
@@ -1042,6 +1045,7 @@ function renderScenario() {
     ftb.appendChild(tr);
   });
 
+  renderTarget();
   renderPinned();
 }
 
@@ -1057,6 +1061,110 @@ function pinnedNote(p) {
     if (b.t === 'pct') return `${b.label} ${pct(b.v)}`;
     return b.label;
   }).join(' \u00b7 ');
+}
+
+// Work back from a price the client has named. The amount is typed in the
+// DISPLAY currency and stored in ZAR, like every other money input here.
+function targetResult() {
+  const t = ensureScenario().target;
+  return P.allocateTarget({
+    vehicles: deal.vehicles, users: deal.users, selected: deal.selected,
+    amount: t.amount || 0, mode: t.mode, basis: t.basis,
+  });
+}
+
+function renderTarget() {
+  const out = document.getElementById('scn-tgt-out');
+  if (!out) return;
+  const sc = ensureScenario();
+  const t = sc.target;
+  const live = document.activeElement;
+
+  const amt = document.getElementById('scn-tgt-amt');
+  if (amt && amt !== live) amt.value = (t.amount === null || t.amount === undefined) ? '' : fxInputValue(t.amount);
+  document.getElementById('scn-tgt-mode').value = t.mode;
+  document.getElementById('scn-tgt-basis').value = t.basis;
+  document.getElementById('scn-tgt-cur').textContent =
+    `${curSym()} ${displayCurrency}` + (t.mode === 'perVehicle' ? ` · ${deal.vehicles} vehicles` : '');
+
+  const a = targetResult();
+  const applyBtn = document.getElementById('scn-tgt-apply');
+  if (!a.allocatable) {
+    applyBtn.disabled = true;
+    out.innerHTML = t.amount
+      ? '<p class="note">Nothing to split — select products with a quantity above zero.</p>'
+      : '';
+    return;
+  }
+  applyBtn.disabled = false;
+
+  // Run the allocated prices through the scenario engine so the margin shown
+  // here is the same figure the table below will show once applied.
+  const overrides = {};
+  Object.keys(a.prices).forEach((k) => { overrides[k] = { price: a.prices[k] }; });
+  const s = P.calcScenario({
+    vehicles: deal.vehicles, users: deal.users, selected: deal.selected,
+    productOverride: overrides, includeStepCost: sc.includeStepCost,
+  });
+
+  const gm = s.totalGrossMargin;
+  const cls = gm < 0.5 ? 'tgt-bad' : gm < 0.6 ? 'tgt-warn' : 'tgt-ok';
+  const shortfall = s.floor50Revenue - s.totalRevenue;
+  const verdict = gm < 0
+    ? 'This loses money at every unit.'
+    : gm < 0.5
+      ? `Below the 50% floor — you would need ${fmtR(shortfall)}/mo more to reach it.`
+      : gm < 0.6 ? 'Workable, but under the 60% guideline.' : 'Comfortably above both floors.';
+
+  const rows = a.rows.map((r) => {
+    const sr = s.rows.find((x) => x.key === r.key) || {};
+    const st = SCN_STATUS[sr.floorStatus] || SCN_STATUS['n/a'];
+    return `<tr>
+      <td>${escapeHtml(r.name)}<span class="scn-basis">${escapeHtml(r.billingLabel)}</span></td>
+      <td class="num">${r.qty}</td>
+      <td class="num">${pct(r.share)}</td>
+      <td class="num">${cur(r.unitPrice)}</td>
+      <td class="num">${pct(r.discount)}</td>
+      <td class="num">${cur(r.revenue)}</td>
+      <td class="num" style="color:${gmColor(sr.grossMargin)};font-weight:600">${pct(sr.grossMargin)}</td>
+      <td style="color:${st.color}">${st.label}</td>
+    </tr>`;
+  }).join('');
+
+  const skipped = a.skipped.length
+    ? `<p class="note">Not included: ${a.skipped.map((x) => escapeHtml(x.name) + ' (' + x.reason + ')').join(', ')}. Set a quantity for these or untick them.</p>`
+    : '';
+
+  out.innerHTML = `
+    <div class="tgt-verdict ${cls}">
+      <span>Target <b>${fmtR(a.monthlyTarget)}</b>/mo</span>
+      <span class="sep">·</span>
+      <span>Blended GM <b style="color:${gmColor(gm)}">${pct(gm)}</b></span>
+      <span class="sep">·</span>
+      <span>Contribution <b>${fmtR(s.totalContribution)}</b>/mo</span>
+      <span class="sep">·</span>
+      <span>${escapeHtml(verdict)}</span>
+    </div>
+    <table class="data">
+      <thead><tr>
+        <th>Product</th><th class="num">Qty</th><th class="num">Share</th>
+        <th class="num">Price <span class="scn-unit">/unit</span></th><th class="num">Disc %</th>
+        <th class="num">Revenue <span class="scn-unit">/mo</span></th><th class="num">GM %</th><th>Status</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${skipped}`;
+}
+
+function applyTarget() {
+  const sc = ensureScenario();
+  const a = targetResult();
+  if (!a.allocatable) return;
+  // Replace the per-product overrides wholesale: a leftover discount on one
+  // product would quietly break the total the client agreed to.
+  sc.productOverride = {};
+  Object.keys(a.prices).forEach((k) => { sc.productOverride[k] = { price: a.prices[k], discount: null }; });
+  recompute();
 }
 
 function renderPinned() {
@@ -1149,11 +1257,26 @@ function wireScenario() {
     renderScenario();
   });
 
+  document.getElementById('scn-tgt-amt').addEventListener('input', (e) => {
+    const t = ensureScenario().target;
+    t.amount = e.target.value === '' ? null : Math.max(0, fxToZar(e.target.value));
+    renderTarget();
+  });
+  document.getElementById('scn-tgt-mode').addEventListener('change', (e) => {
+    ensureScenario().target.mode = e.target.value === 'total' ? 'total' : 'perVehicle';
+    renderTarget();
+  });
+  document.getElementById('scn-tgt-basis').addEventListener('change', (e) => {
+    ensureScenario().target.basis = e.target.value === 'list' ? 'list' : 'cost';
+    renderTarget();
+  });
+  document.getElementById('scn-tgt-apply').addEventListener('click', applyTarget);
   document.getElementById('scn-pin').addEventListener('click', pinScenario);
   document.getElementById('scn-reset').addEventListener('click', () => {
     const sc = ensureScenario();
     sc.bundleOverride = null; sc.volumeOverride = null;
     sc.productOverride = {}; sc.includeStepCost = false;
+    sc.target = { amount: null, mode: 'perVehicle', basis: 'cost' };
     renderScenario();
   });
   document.getElementById('scn-pinned-tbody').addEventListener('click', (e) => {

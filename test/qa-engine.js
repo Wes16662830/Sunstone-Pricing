@@ -397,6 +397,107 @@ P.setConfig(P.getDefaultConfig());
   check('calcScenario does not mutate the active config', JSON.stringify(P.getConfig()) === before);
 }
 
+console.log('\n=== H4. Target allocation (allocateTarget) ===');
+P.setConfig(P.getDefaultConfig());
+{
+  const base = { vehicles: 120, users: 20, selected: { tracking: true, fuel: true, digitalJourney: true } };
+  const alloc = (o) => P.allocateTarget({ ...base, ...o });
+  const asOverrides = (a) => {
+    const ov = {};
+    Object.keys(a.prices).forEach((k) => { ov[k] = { price: a.prices[k] }; });
+    return ov;
+  };
+  const scenarioFor = (a) => P.calcScenario({ ...base, productOverride: asOverrides(a) });
+
+  // Mode: per vehicle vs whole bill.
+  const perVeh = alloc({ amount: 400, mode: 'perVehicle', basis: 'cost' });
+  check('per-vehicle target multiplies by the fleet', perVeh.monthlyTarget === 48000, String(perVeh.monthlyTarget));
+  const total = alloc({ amount: 48000, mode: 'total', basis: 'cost' });
+  check('total target is used as given', total.monthlyTarget === 48000, String(total.monthlyTarget));
+  check('both modes reach the same allocation',
+    JSON.stringify(perVeh.prices) === JSON.stringify(total.prices));
+
+  // The allocation must actually add up to what the client agreed to pay.
+  for (const basis of ['cost', 'list']) {
+    const a = alloc({ amount: 400, mode: 'perVehicle', basis });
+    const sum = a.rows.reduce((s2, r) => s2 + r.unitPrice * r.qty, 0);
+    check(`${basis} split adds up to the target`, Math.abs(sum - a.monthlyTarget) < 1e-6, `${sum} vs ${a.monthlyTarget}`);
+    check(`${basis} split revenue matches the engine`,
+      Math.abs(scenarioFor(a).totalRevenue - a.monthlyTarget) < 1e-6);
+    check(`${basis} shares sum to 1`, Math.abs(a.rows.reduce((s2, r) => s2 + r.share, 0) - 1) < 1e-12);
+  }
+
+  // COST basis: every product lands on the SAME gross margin.
+  const byCost = scenarioFor(alloc({ amount: 400, mode: 'perVehicle', basis: 'cost' }));
+  const costGMs = byCost.rows.filter((r) => r.selected).map((r) => r.grossMargin);
+  check('cost basis gives every product the same GM',
+    Math.max(...costGMs) - Math.min(...costGMs) < 1e-9, costGMs.map((g) => g.toFixed(4)).join(','));
+  check('cost basis per-product GM equals the blended GM',
+    Math.abs(costGMs[0] - byCost.totalGrossMargin) < 1e-9);
+
+  // LIST basis: every product takes the SAME discount off list.
+  const aList = alloc({ amount: 400, mode: 'perVehicle', basis: 'list' });
+  const discs = aList.rows.map((r) => r.discount);
+  check('list basis gives every product the same discount',
+    Math.max(...discs) - Math.min(...discs) < 1e-9, discs.map((d) => d.toFixed(4)).join(','));
+  const listGMs = scenarioFor(aList).rows.filter((r) => r.selected).map((r) => r.grossMargin);
+  check('list basis leaves GM differing by product',
+    Math.max(...listGMs) - Math.min(...listGMs) > 0.01, listGMs.map((g) => g.toFixed(4)).join(','));
+
+  // Whichever basis, the blended result is the same — only the split differs.
+  check('both bases produce the same blended GM',
+    Math.abs(byCost.totalGrossMargin - scenarioFor(aList).totalGrossMargin) < 1e-9);
+
+  // Weighting must follow the stated basis.
+  const trkCost = perVeh.rows.find((r) => r.key === 'tracking');
+  const fuelCost = perVeh.rows.find((r) => r.key === 'fuel');
+  check('cost weights follow marginal cost x qty',
+    Math.abs(trkCost.weight - 83 * 120) < 1e-9 && Math.abs(fuelCost.weight - 83 * 120) < 1e-9);
+  const trkList = aList.rows.find((r) => r.key === 'tracking');
+  check('list weights follow list price x qty',
+    Math.abs(trkList.weight - trkList.listPrice * 120) < 1e-6);
+
+  // A per-user product with no users has no weight and must not absorb budget.
+  const noUsers = P.allocateTarget({ ...base, users: 0, amount: 400, mode: 'perVehicle', basis: 'cost' });
+  check('a zero-quantity product is skipped, not silently funded',
+    noUsers.skipped.some((x) => x.key === 'digitalJourney'), JSON.stringify(noUsers.skipped));
+  check('skipping still allocates the full target to the rest',
+    Math.abs(noUsers.rows.reduce((s2, r) => s2 + r.unitPrice * r.qty, 0) - noUsers.monthlyTarget) < 1e-6);
+  check('a skipped product gets no price', noUsers.prices.digitalJourney === undefined);
+
+  // Unworkable inputs must report themselves rather than produce nonsense.
+  check('nothing selected is not allocatable',
+    P.allocateTarget({ vehicles: 100, users: 10, selected: {}, amount: 400, mode: 'perVehicle' }).allocatable === false);
+  check('a zero target is not allocatable', alloc({ amount: 0, mode: 'total' }).allocatable === false);
+  check('a populated target is allocatable', alloc({ amount: 400, mode: 'perVehicle' }).allocatable === true);
+
+  const hostile = [
+    ['no input', undefined],
+    ['empty object', {}],
+    ['negative amount', { ...base, amount: -500, mode: 'total' }],
+    ['string amount', { ...base, amount: 'lots', mode: 'total' }],
+    ['unknown mode', { ...base, amount: 400, mode: 'sideways' }],
+    ['unknown basis', { ...base, amount: 400, basis: 'vibes' }],
+    ['null selected', { vehicles: 10, users: 1, selected: null, amount: 100, mode: 'total' }],
+    ['zero vehicles, per-vehicle mode', { ...base, vehicles: 0, amount: 400, mode: 'perVehicle' }],
+  ];
+  for (const [label, input] of hostile) {
+    let ok = false;
+    try {
+      const a = P.allocateTarget(input);
+      ok = Number.isFinite(a.monthlyTarget) && a.monthlyTarget >= 0 && Array.isArray(a.rows)
+        && a.rows.every((r) => Number.isFinite(r.unitPrice) && r.unitPrice >= 0);
+    } catch (e) { ok = false; }
+    check(`allocateTarget survives ${label}`, ok);
+  }
+  check('an unknown basis falls back to cost', P.allocateTarget({ ...base, amount: 400, basis: 'vibes' }).basis === 'cost');
+  check('an unknown mode falls back to per vehicle', P.allocateTarget({ ...base, amount: 400, mode: 'sideways' }).mode === 'perVehicle');
+
+  const before = JSON.stringify(P.getConfig());
+  alloc({ amount: 999, mode: 'total', basis: 'list' });
+  check('allocateTarget does not mutate the active config', JSON.stringify(P.getConfig()) === before);
+}
+
 console.log('\n=== I. Cross-backend projection parity (server.js vs functions/_shared.js) ===');
 {
   // Compare the two hand-written clientPriceList implementations field-by-field.

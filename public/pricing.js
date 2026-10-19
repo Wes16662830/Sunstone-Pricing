@@ -690,6 +690,75 @@
   }
 
   // ---------------------------------------------------------------------------
+  // TARGET ALLOCATION — "the client will pay R X in total; make it work"
+  //
+  // Works backwards from a total the client has named and splits it across the
+  // selected products, returning a unit price for each. Feed those prices into
+  // calcScenario as productOverride and every margin figure follows; no margin
+  // logic is duplicated here.
+  //
+  //   amount  the figure the client named, IN RANDS
+  //   mode    'perVehicle' -> amount is per vehicle per month (x fleet size)
+  //           'total'      -> amount is the whole monthly bill
+  //   basis   how the total is divided between products:
+  //           'cost' — in proportion to what each product COSTS to deliver.
+  //                    Every product then lands on the SAME gross margin, so
+  //                    each one takes an equal share of the pain.
+  //           'list' — in proportion to each product's LIST revenue. Every
+  //                    product then takes the SAME discount off list, so their
+  //                    relative prices are preserved.
+  //
+  // A product with zero quantity (a per-user product with no users, say) has no
+  // weight and is reported in `skipped` rather than silently absorbing budget.
+  // ---------------------------------------------------------------------------
+  function allocateTarget(input) {
+    const inp = input || {};
+    const vehicles = Math.max(0, Number(inp.vehicles) || 0);
+    const users = Math.max(0, Number(inp.users) || 0);
+    const selected = inp.selected || {};
+    const basis = inp.basis === 'list' ? 'list' : 'cost';
+    const mode = inp.mode === 'total' ? 'total' : 'perVehicle';
+    const amount = Math.max(0, Number(inp.amount) || 0);
+    const monthlyTarget = mode === 'perVehicle' ? amount * vehicles : amount;
+
+    const rows = [];
+    const skipped = [];
+    activeConfig.products.forEach((p) => {
+      if (!selected[p.key]) return;
+      const qty = billingQty(p, vehicles, users);
+      const list = listPrice(p);
+      if (qty <= 0) {
+        skipped.push({ key: p.key, name: p.name, reason: 'zero quantity' });
+        return;
+      }
+      const weight = basis === 'cost' ? p.marginalCost * qty : list * qty;
+      rows.push({
+        key: p.key, name: p.name, billing: p.billing, billingLabel: billingLabel(p.billing),
+        qty, listPrice: list, marginalCost: p.marginalCost, weight,
+      });
+    });
+
+    const totalWeight = rows.reduce((s, r) => s + r.weight, 0);
+    const prices = {};
+    rows.forEach((r) => {
+      r.share = totalWeight ? r.weight / totalWeight : 0;
+      r.revenue = monthlyTarget * r.share;
+      r.unitPrice = r.qty ? r.revenue / r.qty : 0;
+      r.discount = r.listPrice ? 1 - r.unitPrice / r.listPrice : 0;
+      prices[r.key] = r.unitPrice;
+    });
+
+    return {
+      mode, basis, amount, monthlyTarget,
+      vehicles, users,
+      rows, skipped, totalWeight,
+      // Usable only when there is something to divide and something to divide it by.
+      allocatable: rows.length > 0 && totalWeight > 0 && monthlyTarget > 0,
+      prices,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // CLIENT QUOTE PROJECTION — client-safe whitelist (no cost/margin data)
   // ---------------------------------------------------------------------------
   function buildClientQuote(subscription, implementation, hardware) {
@@ -852,5 +921,6 @@
     calcInternalMargin, buildClientQuote, calcDeal, calcScenario,
     // client-facing hardware (margin-safe)
     clientHardwareOptions, clientHardwareInput, clientHardwareProjection,
+    allocateTarget,
   };
 });
