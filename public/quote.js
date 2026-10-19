@@ -207,7 +207,7 @@ function hardwareDocSection(h) {
   return `
     <h3 style="margin-top:18px">Hardware &amp; Installation (once-off)</h3>
     <table>
-      <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit</th>
+      <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Unit ${currency}</th>
         <th class="num">Total ${currency}</th></tr></thead>
       <tbody>${rows}
         <tr class="total"><td>Once-off total (excl. VAT)</td><td></td><td></td>
@@ -232,7 +232,7 @@ function renderQuoteDoc(q) {
     </div>
     <h3>Subscription</h3>
     <table>
-      <thead><tr><th>Product</th><th>Basis</th><th class="num">Qty</th><th class="num">Unit/mo</th>
+      <thead><tr><th>Product</th><th>Basis</th><th class="num">Qty</th><th class="num">Unit/mo ${currency}</th>
         <th class="num">Monthly ${currency}</th><th class="num">Annual ${currency}</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6">No products selected.</td></tr>'}
         <tr class="total"><td>Total (excl. VAT)</td><td></td><td></td><td></td>

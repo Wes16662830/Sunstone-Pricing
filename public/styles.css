@@ -456,3 +456,8 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
 .tgt-ok   { border-left: 3px solid var(--good); }
 .tgt-warn { border-left: 3px solid var(--warn); }
 .tgt-bad  { border-left: 3px solid var(--bad); }
+
+/* Currency code stamped into money column headers, and the billing basis shown
+   under a product name so "per unit" figures are comparable across rows. */
+.cur-tag { font-weight: 400; color: var(--text-mute); letter-spacing: 0; }
+.row-basis { display: block; font-size: 10.5px; color: var(--text-mute); margin-top: 1px; }

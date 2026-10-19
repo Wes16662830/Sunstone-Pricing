@@ -118,6 +118,41 @@ function check(name, cond, detail) {
     (await p.locator('#sub-tbody input[type=checkbox]:checked').count()) === 0);
   check('Clear all leaves the fleet size alone', (await p.inputValue('#in-vehicles')) === '10');
 
+  console.log('\n=== 2c. Currency labelling on money columns ===');
+  // Table CELLS deliberately carry no symbol — a symbol on every row of a dense
+  // numeric table is noise — so the HEADER is what tells the reader which
+  // currency they are looking at, and it must follow the selector.
+  const tags = () => p.$$eval('.cur-tag', (es) => es.map((e) => e.textContent.trim()));
+  const zarTags = await tags();
+  check('money headers carry a currency tag', zarTags.length >= 20, String(zarTags.length));
+  check('every currency tag is filled in', zarTags.every((t) => t.length > 0),
+    String(zarTags.filter((t) => !t).length) + ' empty');
+  check('every currency tag agrees', new Set(zarTags).size === 1, [...new Set(zarTags)].join(' / '));
+  check('the tag names the active currency', /ZAR/.test(zarTags[0]), zarTags[0]);
+  await p.selectOption('#currency-select', 'USD');
+  await p.waitForTimeout(500);
+  const usdTags = await tags();
+  check('currency tags follow the selector', usdTags.every((t) => /USD/.test(t)), [...new Set(usdTags)].join(' / '));
+  check('the same number of columns stay labelled', usdTags.length === zarTags.length,
+    `${zarTags.length} -> ${usdTags.length}`);
+  await p.selectOption('#currency-select', 'ZAR');
+  await p.waitForTimeout(500);
+
+  // Marginal cost is per vehicle for some products and per user for others, so
+  // the old "Marginal/lic" header was comparing figures that are not alike.
+  await p.click('.tab[data-tab="margin"]');
+  await p.waitForTimeout(300);
+  const marginHead = await p.$eval('#margin-table thead', (e) => e.innerText);
+  check('the margin column is no longer labelled "/lic"', !/\/lic/i.test(marginHead), marginHead.replace(/\n/g, ' '));
+  check('the margin column says it is per unit', /per unit|\/ UNIT/i.test(marginHead), marginHead.replace(/\n/g, ' '));
+  const marginRows = await p.$$eval('#margin-tbody tr', (rs) => rs.map((r) => r.innerText.replace(/\n/g, ' ')));
+  check('each margin row states its billing basis',
+    marginRows.some((r) => /per vehicle/.test(r)), marginRows[0]);
+  const floorHead = await p.$eval('#margin-floor thead', (e) => e.innerText);
+  check('the floor table also states the unit', /per unit|\/ UNIT/i.test(floorHead), floorHead.replace(/\n/g, ' '));
+  await p.click('.tab[data-tab="subscription"]');
+  await p.waitForTimeout(250);
+
   console.log('\n=== 3. Subscription selection drives totals ===');
   await p.click('.tab[data-tab="subscription"]');
   await p.fill('#in-vehicles', '20');
