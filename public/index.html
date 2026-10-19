@@ -83,7 +83,8 @@
       <div id="conflict-banner" class="banner banner-warn hidden"></div>
       <div class="grid-2">
         <div class="card">
-          <h2>Product Selection</h2>
+          <h2>Product Selection <button class="btn cfg-del" id="sub-clear" title="Untick every product. Fleet size, hardware and implementation are left alone — use “New quote” in the Quotes drawer to reset everything.">✕ Clear all</button></h2>
+          <p class="note" id="sub-users-hint" style="display:none"></p>
           <table class="data" id="sub-table">
             <thead>
               <tr><th>Include</th><th>Product</th><th>Billing</th><th class="num">Qty</th><th class="num">List/unit</th><th class="num">Effective/unit</th><th class="num">Monthly</th><th class="num">Annual</th></tr>
@@ -102,6 +103,7 @@
 
     <!-- HARDWARE -->
     <section class="panel" data-panel="hardware">
+      <div id="hw-fleet-warn" class="banner banner-warn hidden"></div>
       <div class="grid-2">
         <div class="card">
           <h2>Fleet Composition</h2>
@@ -120,7 +122,7 @@
             <tr><td>Digital Journey handset</td><td><select id="hw-dj-sku" class="cell-input"></select></td></tr>
             <tr><td>Stock Master handset</td><td><select id="hw-sm-sku" class="cell-input"></select></td></tr>
           </table>
-          <p class="note">Improvement over the source workbook: handset is a real dropdown across all three SKUs, not a hardcoded per-row VLOOKUP.</p>
+          <p class="note">Sets which handset model is quoted on the Digital Journey and Stock Master hardware lines. Add or edit models in Config → Hardware Catalog.</p>
         </div>
       </div>
       <div class="card">
@@ -146,8 +148,8 @@
     <!-- IMPLEMENTATION -->
     <section class="panel" data-panel="implementation">
       <div class="card">
-        <h2>Implementation Activities (time &amp; materials)</h2>
-        <p class="note">Training rows only bill when the matching product is selected on Subscription — shown greyed as “not billed” otherwise.</p>
+        <h2>Implementation Activities (time &amp; materials) <button class="btn" id="impl-reset" title="Discard your manual on/off choices and re-apply the suggestions for the current selection">↺ Reset suggestions</button></h2>
+        <p class="note">Activities are <strong>suggested from the deal</strong>: core project work switches on once anything is selected, and each training row switches on when its product is on the quote — including Training&nbsp;—&nbsp;Fuel when fuel probe kits are on the Hardware tab. <strong>Tick or untick any row and it stays as you set it</strong>, even if the product selection changes later; “Reset suggestions” gives that control back. Training rows only bill when the matching product is selected on Subscription — shown greyed as “not billed” otherwise.</p>
         <table class="data" id="impl-table">
           <thead><tr><th>On</th><th>Activity</th><th class="num">Hours</th><th>Senior?</th><th class="num">Rate/hr</th><th class="num">Discount %</th><th class="num">Total</th><th>Status</th></tr></thead>
           <tbody id="impl-tbody"></tbody>

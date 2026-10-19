@@ -49,6 +49,75 @@ function check(name, cond, detail) {
   const implChecked = await p.$$eval('#impl-tbody input[data-f="enabled"]:checked', (e) => e.length);
   check('no implementation activities pre-enabled', implChecked === 0, `${implChecked} enabled`);
 
+  console.log('\n=== 2b. Reported fixes (regressions) ===');
+  // No default customer: a quote must not arrive pre-addressed to another client.
+  check('customer name starts empty', (await p.inputValue('#in-customer')) === '',
+    await p.inputValue('#in-customer'));
+  // The old dev note under the handset dropdowns was a comment on the code.
+  await p.click('.tab[data-tab="hardware"]');
+  await p.waitForTimeout(200);
+  const hwPanel = await p.$eval('.panel[data-panel="hardware"]', (e) => e.innerText);
+  check('no code-commentary note on the hardware page', !/VLOOKUP|source workbook/i.test(hwPanel));
+  // Implementation starts empty and is then suggested from the deal.
+  await p.click('.tab[data-tab="implementation"]');
+  await p.waitForTimeout(200);
+  const implOn = () => p.locator('#impl-tbody input[data-f="enabled"]:checked').count();
+  check('no activities enabled before anything is selected', (await implOn()) === 0, String(await implOn()));
+  await p.click('.tab[data-tab="subscription"]');
+  await p.locator('#sub-tbody tr').filter({ hasText: 'Fuel' }).first().locator('input[type=checkbox]').check();
+  await p.waitForTimeout(500);
+  await p.click('.tab[data-tab="implementation"]');
+  await p.waitForTimeout(300);
+  const suggested = await p.$$eval('#impl-tbody tr', (rs) => rs
+    .filter((r) => r.querySelector('input[data-f=enabled]').checked)
+    .map((r) => r.children[1].innerText));
+  check('selecting a product suggests core activities', suggested.includes('Project Management'), suggested.join(','));
+  check('selecting Fuel suggests its training', suggested.some((n) => /Training.*Fuel/.test(n)), suggested.join(','));
+  check('training for unselected products stays off',
+    !suggested.some((n) => /Training.*Stock Master/.test(n)), suggested.join(','));
+  // A manual choice must survive a later product change — this is the trap in
+  // auto-suggestion, and the reason activities carry a userSet flag.
+  const rbTrain = p.locator('#impl-tbody tr').filter({ hasText: 'Route Builder' }).first().locator('input[data-f="enabled"]');
+  await rbTrain.check();
+  await p.waitForTimeout(300);
+  await p.click('.tab[data-tab="subscription"]');
+  await p.locator('#sub-tbody tr').filter({ hasText: 'Stock Master' }).first().locator('input[type=checkbox]').check();
+  await p.waitForTimeout(500);
+  await p.click('.tab[data-tab="implementation"]');
+  await p.waitForTimeout(300);
+  check('a manually ticked activity survives a later product change', await rbTrain.isChecked());
+  await p.click('#impl-reset');
+  await p.waitForTimeout(400);
+  check('"Reset suggestions" hands control back to the deal', !(await rbTrain.isChecked()));
+  // Fleet composition sanity warning, non-blocking.
+  await p.click('.tab[data-tab="subscription"]');
+  await p.fill('#in-vehicles', '10');
+  await p.waitForTimeout(300);
+  await p.click('.tab[data-tab="hardware"]');
+  await p.waitForTimeout(250);
+  await p.fill('#hw-single', '30');
+  await p.dispatchEvent('#hw-single', 'change');
+  await p.waitForTimeout(450);
+  const fleetWarn = await p.$eval('#hw-fleet-warn', (e) => e.classList.contains('hidden') ? '' : e.innerText);
+  check('over-assigning fuel-monitored vehicles warns', /exceeds/i.test(fleetWarn), fleetWarn.replace(/\n/g, ' '));
+  check('the warning does not block the quote',
+    (await p.$eval('#hw-totals', (e) => e.innerText)).length > 0);
+  await p.fill('#hw-single', '5');
+  await p.dispatchEvent('#hw-single', 'change');
+  await p.waitForTimeout(400);
+  check('warning clears once the figures are consistent',
+    await p.$eval('#hw-fleet-warn', (e) => e.classList.contains('hidden')));
+  // Clear all.
+  await p.click('.tab[data-tab="subscription"]');
+  await p.waitForTimeout(200);
+  check('products are selected before Clear all',
+    (await p.locator('#sub-tbody input[type=checkbox]:checked').count()) > 0);
+  await p.click('#sub-clear');
+  await p.waitForTimeout(400);
+  check('Clear all unticks every product',
+    (await p.locator('#sub-tbody input[type=checkbox]:checked').count()) === 0);
+  check('Clear all leaves the fleet size alone', (await p.inputValue('#in-vehicles')) === '10');
+
   console.log('\n=== 3. Subscription selection drives totals ===');
   await p.click('.tab[data-tab="subscription"]');
   await p.fill('#in-vehicles', '20');
@@ -393,8 +462,21 @@ function check(name, cond, detail) {
   check('client page offers installation options', instOptCount > 0, String(instOptCount));
   check('hardware summary hidden until something is picked',
     (await cp.$eval('#r-hardware', (el) => el.innerText.trim())) === '');
+  // Equipment and installation are separate choices, and a client who has not
+  // bought from us before will not know that. Prompt them when it applies.
+  const cNudge = async () => cp.$eval('#install-nudge', (e) => e.hidden ? '' : e.innerText);
+  check('no install prompt before equipment is picked', (await cNudge()) === '');
   await cp.locator('#hardware-list input[data-group="hardware"]').first().fill('4');
   await cp.waitForTimeout(600);
+  check('equipment with no installation prompts the client',
+    /installation/i.test(await cNudge()), (await cNudge()).slice(0, 90));
+  check('installation group says what it is for',
+    /fitting/i.test(await cp.$eval('#install-list .hgroup', (e) => e.innerText)));
+  await cp.locator('#install-list input[data-group="install"]').first().fill('4');
+  await cp.waitForTimeout(600);
+  check('the prompt clears once installation is added', (await cNudge()) === '');
+  await cp.locator('#install-list input[data-group="install"]').first().fill('');
+  await cp.waitForTimeout(500);
   const onceOff = await cp.$eval('#r-hardware', (el) => el.innerText);
   check('once-off total appears after picking hardware', /Once-off/i.test(onceOff), onceOff.slice(0, 80));
   const money = (s) => Number(String(s).replace(/[^0-9.]/g, ''));

@@ -41,7 +41,7 @@ const fmtR = (n, dp = 2) => curSym() + ' ' + cur(n, dp);
 // --- Deal state -------------------------------------------------------------
 function defaultDeal() {
   return {
-    customerName: 'Zambia Sugar',
+    customerName: '',
     quoteDate: new Date().toISOString().slice(0, 10),
     vehicles: 20,
     users: 0,
@@ -90,6 +90,7 @@ let result = null;
 
 // --- Compute + render -------------------------------------------------------
 function recompute() {
+  syncImplementationSuggestions();
   result = P.calcDeal(deal);
   renderAll();
 }
@@ -103,6 +104,62 @@ function renderAll() {
   renderProposal();
   renderMargin();
   renderScenario();
+}
+
+
+// --- SELECTION HELPERS ------------------------------------------------------
+
+// Products billed per user, among those currently selected. Used to explain
+// what "users" means in terms of the products actually on this deal.
+function perUserProducts() {
+  const cfg = P.getConfig();
+  return (cfg.products || [])
+    .filter((p) => p.billing === 'perUser' && deal.selected && deal.selected[p.key])
+    .map((p) => p.quoteLabel || p.name);
+}
+
+function clearProductSelection() {
+  deal.selected = {};
+  recompute();
+}
+
+// Hardware rows that imply a fuel probe is being fitted. Used to suggest fuel
+// training even when the Fuel subscription product itself is not selected —
+// someone buying probes needs the training either way.
+function fuelHardwareSelected() {
+  const it = (deal.hardware && deal.hardware.items) || {};
+  return !!(it.fuelKitSingleInclude || it.fuelKitDualInclude);
+}
+
+// --- IMPLEMENTATION SUGGESTIONS ---------------------------------------------
+// Activities are suggested from what the deal actually contains: core project
+// activities once anything is selected, and a training row whenever its product
+// is on the deal. An activity the user has switched on or off by hand carries
+// userSet and is left alone from then on, so a suggestion can never overwrite a
+// decision. "Reset suggestions" clears those flags and re-syncs.
+
+function implementationSuggestion(activity) {
+  const anySelected = Object.keys(deal.selected || {}).some((k) => deal.selected[k]);
+  if (!anySelected) return false;
+  if (!activity.product) return true;                       // core activity
+  if (deal.selected[activity.product]) return true;         // product on the deal
+  if (activity.product === 'fuel' && fuelHardwareSelected()) return true;
+  return false;
+}
+
+function syncImplementationSuggestions() {
+  const acts = (deal.implementation && deal.implementation.activities) || [];
+  acts.forEach((a) => {
+    if (a.userSet) return;
+    a.enabled = implementationSuggestion(a);
+  });
+}
+
+function resetImplementationSuggestions() {
+  const acts = (deal.implementation && deal.implementation.activities) || [];
+  acts.forEach((a) => { delete a.userSet; });
+  syncImplementationSuggestions();
+  recompute();
 }
 
 // --- SUBSCRIPTION -----------------------------------------------------------
@@ -156,6 +213,21 @@ function renderSubscription() {
 
   document.getElementById('sub-headline').innerHTML =
     `<div class="lbl">Blended price per vehicle / month</div><div class="big">${fmtR(s.blendedPerVehicle)}</div>`;
+
+  // Explain what the Users box counts, but only once a per-user product is on
+  // the deal — naming the actual products so it is concrete.
+  const uh = document.getElementById('sub-users-hint');
+  if (uh) {
+    const names = perUserProducts();
+    uh.style.display = names.length ? '' : 'none';
+    if (names.length) {
+      uh.innerHTML = `<strong>Users</strong> drives ${escapeHtml(names.join(' and '))}. ` +
+        `One user = one person with their own login on the mobile app — typically one driver for ` +
+        `Digital Journey, one warehouse counter for Stock Master. Count people who need the app, ` +
+        `not vehicles. Currently <strong>${deal.users}</strong> user${deal.users === 1 ? '' : 's'}.` +
+        (deal.users === 0 ? ' <span class="warn-ink">Set it above or these lines bill nothing.</span>' : '');
+    }
+  }
 }
 
 // --- HARDWARE ---------------------------------------------------------------
@@ -175,6 +247,25 @@ function renderHardware() {
   const h = result.hardware;
   document.getElementById('hw-total-veh').textContent = h.vehicles;
   document.getElementById('hw-trackonly').textContent = h.trackingOnlyQty;
+
+  // Fuel-monitored vehicles are a subset of the fleet, so single + dual cannot
+  // exceed the total. Warn rather than block: a hardware-only quote legitimately
+  // runs with 0 vehicles on the Subscription tab.
+  const fw = document.getElementById('hw-fleet-warn');
+  if (fw) {
+    const monitored = (Number(deal.hardware.singleTank) || 0) + (Number(deal.hardware.dualTank) || 0);
+    const over = monitored - h.vehicles;
+    if (over > 0) {
+      fw.classList.remove('hidden');
+      fw.innerHTML = `⚠ <strong>${monitored} fuel-monitored vehicles</strong> exceeds the ` +
+        `<strong>${h.vehicles}</strong> on the Subscription tab by <strong>${over}</strong>. ` +
+        (h.vehicles === 0
+          ? 'That is fine for a hardware-only quote — otherwise set the fleet size on Subscription.'
+          : 'Check the fleet size, or carry on if this is deliberate — nothing is blocked.');
+    } else {
+      fw.classList.add('hidden');
+    }
+  }
 
   const tb = document.getElementById('hw-tbody');
   tb.innerHTML = '';
@@ -338,7 +429,13 @@ function renderImplementation() {
       const i = Number(e.target.dataset.impl), f = e.target.dataset.f;
       const a = deal.implementation.activities[i];
       if (f === 'senior') a.senior = e.target.checked;
-      else if (f === 'enabled') a.enabled = e.target.checked;
+      else if (f === 'enabled') {
+        a.enabled = e.target.checked;
+        // Once the user decides about an activity, the suggestion engine stops
+        // managing it — selecting another product must never silently undo a
+        // deliberate choice.
+        a.userSet = true;
+      }
       else if (f === 'discount') a.discount = Math.max(0, Math.min(100, Number(e.target.value))) / 100;
       else if (f === 'hours') a.hours = Math.max(0, Number(e.target.value));
       recompute();
@@ -1650,6 +1747,8 @@ async function init() {
   wireConfig();
   wireClientLinks();
   wireScenario();
+  document.getElementById('sub-clear').addEventListener('click', clearProductSelection);
+  document.getElementById('impl-reset').addEventListener('click', resetImplementationSuggestions);
   syncInputsFromDeal();
   renderConfig();
   recompute();

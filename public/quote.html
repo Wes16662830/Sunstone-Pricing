@@ -105,6 +105,9 @@
     .hgroup { font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--dim);
       margin:16px 0 2px; padding-top:12px; border-top:1px solid var(--soft); }
     .hgroup:first-child { margin-top:0; padding-top:0; border-top:none; }
+    .fhint { font-size:11.5px; color:var(--dim); line-height:1.45; }
+    .install-nudge { margin:12px 0 0; padding:10px 12px; background:#f6f2e8; border:1px solid #ecdfc4;
+      border-radius:8px; font-size:12.5px; color:#6b5320; line-height:1.5; }
   </style>
 </head>
 <body>
@@ -145,6 +148,7 @@
             <div class="field" id="field-users" style="display:none">
               <label for="in-users">Number of users</label>
               <input id="in-users" type="number" min="0" step="1" value="0" />
+              <small class="fhint" id="users-hint"></small>
             </div>
           </div>
         </div>
@@ -156,7 +160,7 @@
 
         <div class="card" id="panel-hardware">
           <h2>Hardware &amp; installation</h2>
-          <p class="hwsub">Optional once-off items. Enter a quantity for anything you need — leave blank or 0 to exclude it.</p>
+          <p class="hwsub">Optional once-off items. Enter a quantity for anything you need — leave blank or 0 to exclude it. <strong>Equipment and installation are priced separately</strong>, so if you want us to fit the equipment, add the matching installation quantities below.</p>
           <label class="intl" id="intl-wrap">
             <input type="checkbox" id="in-intl" />
             <span>
@@ -166,6 +170,7 @@
           </label>
           <div id="hardware-list"></div>
           <div id="install-list"></div>
+          <p class="install-nudge" id="install-nudge" hidden></p>
         </div>
       </div>
 

@@ -431,3 +431,8 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
 .scn-tile-lead > b { font-size: 25px; }
 
 .scn-h3 { font-size: 13px; margin: var(--s5) 0 var(--s1); letter-spacing: -.01em; }
+
+/* Inline caution text inside a note (e.g. "users is 0, these lines bill nothing") */
+.warn-ink { color: var(--warn); font-weight: 500; }
+/* Buttons that sit inside a card heading */
+.card h2 > .btn { float: right; font-size: 11px; padding: 4px 9px; margin-top: -2px; }
