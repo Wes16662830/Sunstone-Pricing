@@ -235,6 +235,70 @@
             </table>
           </div>
         </div>
+
+        <!-- SCENARIO PLANNER — "the client will only pay X; does that work?" -->
+        <div class="card" id="scenario-card">
+          <h2>Scenario Planner</h2>
+          <p class="note">
+            Set a <strong>discount</strong> or type the <strong>price the client will actually pay</strong> —
+            the other column follows. Blank means use the normal schedules. Nothing here changes the quote;
+            it is a sandbox for answering “can I make this work?”.
+          </p>
+
+          <div class="scn-controls">
+            <label class="scn-field">
+              <span>Bundle discount %</span>
+              <input id="scn-bundle" type="number" min="0" max="100" step="0.5" placeholder="auto">
+              <small id="scn-bundle-auto"></small>
+            </label>
+            <label class="scn-field">
+              <span>Volume discount %</span>
+              <input id="scn-volume" type="number" min="0" max="100" step="0.5" placeholder="auto">
+              <small id="scn-volume-auto"></small>
+            </label>
+            <label class="scn-check" title="Crossing a step threshold adds a real monthly cost. Off by default to match the table above, which treats it as advisory.">
+              <input id="scn-step" type="checkbox"> Include step costs
+            </label>
+            <div class="scn-actions">
+              <button id="scn-pin" class="btn btn-primary">📌 Pin scenario</button>
+              <button id="scn-reset" class="btn">↺ Reset</button>
+            </div>
+          </div>
+
+          <table class="data" id="scn-table">
+            <thead>
+              <tr>
+                <th>Product</th><th class="num">Qty</th><th class="num">List</th>
+                <th class="num">Disc %</th><th class="num">Price</th>
+                <th class="num">Revenue/mo</th><th class="num">Cost/mo</th>
+                <th class="num">Contribution</th><th class="num">GM %</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="scn-tbody"></tbody>
+          </table>
+          <p class="note" id="scn-empty" style="display:none">Select products on the Subscription tab to plan a scenario.</p>
+
+          <div class="scn-summary" id="scn-summary"></div>
+
+          <h3 class="scn-h3">How low can you go?</h3>
+          <p class="note">The prices that matter in a negotiation, per product. “Target” is the price that hits the product’s own target GM — that is list.</p>
+          <table class="data" id="scn-floors">
+            <thead>
+              <tr><th>Product</th><th class="num">Breakeven</th><th class="num">50% GM</th><th class="num">60% GM</th>
+                  <th class="num">Target</th><th class="num">Your price</th><th class="num">Max disc @50%</th></tr>
+            </thead>
+            <tbody id="scn-floors-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="card" id="scn-pinned-card" style="display:none">
+          <h2>Pinned Scenarios</h2>
+          <p class="note">Snapshots you have pinned, newest last. Compare them side by side, then take the one that works.</p>
+          <table class="data" id="scn-pinned">
+            <thead><tr><th>Scenario</th><th class="num">Revenue/mo</th><th class="num">Cost/mo</th><th class="num">Contribution</th><th class="num">GM %</th><th class="num">Disc vs list</th><th></th></tr></thead>
+            <tbody id="scn-pinned-tbody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
 

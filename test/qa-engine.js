@@ -227,6 +227,141 @@ P.setConfig(P.getDefaultConfig());
   check('hardware options leak no cost/margin keys', optLeaked.length === 0, optLeaked.join(','));
 }
 
+console.log('\n=== H3. Scenario planner (calcScenario) ===');
+P.setConfig(P.getDefaultConfig());
+{
+  const base = { vehicles: 120, users: 0, selected: { tracking: true, fuel: true, routeBuilder: true } };
+  const scn = (o) => P.calcScenario({ ...base, ...o });
+  const row = (s, k) => s.rows.find((r) => r.key === k);
+
+  // 1. With no overrides the scenario must agree with the real quote exactly —
+  //    otherwise the planner is modelling something the business doesn't sell.
+  const auto = scn({});
+  const sub = P.calcSubscription(base);
+  const mar = P.calcInternalMargin(sub);
+  check('auto scenario revenue == calcSubscription total',
+    Math.abs(auto.totalRevenue - sub.totalMonthly) < 1e-9, `${auto.totalRevenue} vs ${sub.totalMonthly}`);
+  check('auto scenario GM == calcInternalMargin GM',
+    Math.abs(auto.totalGrossMargin - mar.totalGrossMargin) < 1e-9,
+    `${auto.totalGrossMargin} vs ${mar.totalGrossMargin}`);
+  check('auto scenario per-product price == quote effective price',
+    auto.rows.every((r) => Math.abs(r.effectivePrice - sub.lines.find((l) => l.key === r.key).effectivePrice) < 1e-9));
+
+  // 2. The headline use case: the client names a price.
+  const pinned = scn({ productOverride: { tracking: { price: 200 } } });
+  const t = row(pinned, 'tracking');
+  check('price override is used verbatim', t.effectivePrice === 200);
+  check('price override reports its source', t.source === 'price');
+  check('price override derives the implied discount',
+    Math.abs(t.discount - (1 - 200 / t.listPrice)) < 1e-12, String(t.discount));
+  check('price override GM = (price - cost) / price',
+    Math.abs(t.grossMargin - (200 - 83) / 200) < 1e-12, String(t.grossMargin));
+  check('price override leaves other products on schedule',
+    row(pinned, 'fuel').source === 'auto');
+
+  // 3. Discount override, and price winning over it.
+  const d = row(scn({ productOverride: { tracking: { discount: 0.25 } } }), 'tracking');
+  check('discount override applies to LIST, not to the schedule price',
+    Math.abs(d.effectivePrice - d.listPrice * 0.75) < 1e-12, String(d.effectivePrice));
+  const both = row(scn({ productOverride: { tracking: { price: 190, discount: 0.9 } } }), 'tracking');
+  check('price beats discount when both are set', both.effectivePrice === 190);
+
+  // 4. Bundle / volume overrides, and the empty-vs-zero distinction that makes
+  //    "blank = use the schedule" work.
+  const b0 = scn({ bundleOverride: 0, volumeOverride: 0 });
+  check('explicit 0 discount means NO discount, not "auto"',
+    b0.rows.every((r) => !r.selected || Math.abs(r.effectivePrice - r.listPrice) < 1e-12));
+  check('explicit 0 is reported as an override', b0.bundle.overridden && b0.volume.overridden);
+  const bNull = scn({ bundleOverride: null, volumeOverride: undefined });
+  check('null/undefined fall back to the schedules',
+    !bNull.bundle.overridden && bNull.bundle.discount === auto.bundle.auto);
+  const b30 = scn({ bundleOverride: 0.30, volumeOverride: 0 });
+  check('bundle override applies only to eligible products',
+    b30.rows.every((r) => !r.selected || Math.abs(r.effectivePrice - r.listPrice * (r.bundleEligible ? 0.7 : 1)) < 1e-9));
+  check('scenario still reports the schedule value it replaced',
+    b30.bundle.auto === auto.bundle.auto && b30.bundle.discount === 0.30);
+
+  // 5. Step costs — ignoring these gives a dangerously wrong answer at scale.
+  const big = { vehicles: 700, users: 0, selected: { tracking: true } };
+  const off = P.calcScenario(big), on = P.calcScenario({ ...big, includeStepCost: true });
+  const ro = row(off, 'tracking'), rn = row(on, 'tracking');
+  check('steps are counted even when not charged', ro.stepCount === 2 && ro.stepMonthly === 50000);
+  check('step cost excluded by default', ro.monthlyCost === 83 * 700);
+  check('step cost included when asked', rn.monthlyCost === 83 * 700 + 50000);
+  check('including step cost lowers GM', rn.grossMargin < ro.grossMargin);
+  check('revenue is unaffected by the step toggle', rn.revenue === ro.revenue);
+
+  // 6. The negotiation floors must be exactly what they claim.
+  const f = row(auto, 'tracking');
+  check('breakeven == marginal cost', f.breakeven === 83);
+  check('floor50 yields exactly 50% GM',
+    Math.abs((f.floor50 - f.marginalCost) / f.floor50 - 0.5) < 1e-12);
+  check('floor60 yields exactly 60% GM',
+    Math.abs((f.floor60 - f.marginalCost) / f.floor60 - 0.6) < 1e-12);
+  check('target price == list price (the product\'s own target GM)',
+    f.targetPrice === f.listPrice);
+  check('target price yields exactly the product target GM',
+    Math.abs((f.targetPrice - f.marginalCost) / f.targetPrice - f.targetGM) < 1e-12);
+  check('maxDiscount50 lands exactly on the 50% floor',
+    Math.abs(f.listPrice * (1 - f.maxDiscount50) - f.floor50) < 1e-9);
+
+  // 7. Deal-level floors must track whatever makes up the cost.
+  for (const step of [false, true]) {
+    const s = P.calcScenario({ ...big, selected: { tracking: true, fuel: true }, includeStepCost: step });
+    check(`floor50Revenue is exactly 50% GM (step costs ${step ? 'on' : 'off'})`,
+      Math.abs((s.floor50Revenue - s.totalCost) / s.floor50Revenue - 0.5) < 1e-12);
+    check(`breakevenRevenue == total cost (step costs ${step ? 'on' : 'off'})`,
+      s.breakevenRevenue === s.totalCost);
+  }
+
+  // 8. Status banding drives the colour a user makes a decision from.
+  check('price below cost flags a loss',
+    row(scn({ productOverride: { tracking: { price: 50 } } }), 'tracking').floorStatus === 'loss');
+  check('price below the 50% floor is flagged',
+    row(scn({ productOverride: { tracking: { price: 150 } } }), 'tracking').floorStatus === 'below50');
+  check('price between the floors is flagged below60',
+    row(scn({ productOverride: { tracking: { price: 190 } } }), 'tracking').floorStatus === 'below60');
+  check('a healthy price is flagged healthy',
+    row(scn({ productOverride: { tracking: { price: 260 } } }), 'tracking').floorStatus === 'healthy');
+  check('unselected products are n/a',
+    row(scn({ selected: { tracking: true } }), 'fuel').floorStatus === 'n/a');
+
+  // 9. Unselected products must not move any total.
+  const one = scn({ selected: { tracking: true } });
+  check('unselected products contribute no revenue or cost',
+    one.rows.filter((r) => !r.selected).every((r) => r.revenue === 0 && r.monthlyCost === 0));
+  check('totals count only selected products',
+    Math.abs(one.totalRevenue - row(one, 'tracking').revenue) < 1e-9);
+
+  // 10. Hostile / empty input must not throw or invent money.
+  const bad = [
+    ['no input', undefined],
+    ['empty object', {}],
+    ['negative fleet', { vehicles: -50, selected: { tracking: true } }],
+    ['string fleet', { vehicles: 'abc', selected: { tracking: true } }],
+    ['null selected', { vehicles: 10, selected: null }],
+    ['productOverride not an object', { vehicles: 10, selected: { tracking: true }, productOverride: 'nope' }],
+    ['negative price', { vehicles: 10, selected: { tracking: true }, productOverride: { tracking: { price: -99 } } }],
+    ['string price', { vehicles: 10, selected: { tracking: true }, productOverride: { tracking: { price: 'free' } } }],
+    ['unknown product key', { vehicles: 10, selected: { tracking: true }, productOverride: { nope: { price: 5 } } }],
+    ['discount over 100%', { vehicles: 10, selected: { tracking: true }, productOverride: { tracking: { discount: 5 } } }],
+  ];
+  for (const [label, input] of bad) {
+    let ok = false;
+    try {
+      const s = P.calcScenario(input);
+      ok = Number.isFinite(s.totalRevenue) && Number.isFinite(s.totalGrossMargin) && s.totalRevenue >= 0;
+    } catch (e) { ok = false; }
+    check(`calcScenario survives ${label}`, ok);
+  }
+
+  // 11. The planner is INTERNAL — but it must not corrupt the shared config,
+  //     which every client-facing surface also reads.
+  const before = JSON.stringify(P.getConfig());
+  scn({ bundleOverride: 0.9, productOverride: { tracking: { price: 1 } }, includeStepCost: true });
+  check('calcScenario does not mutate the active config', JSON.stringify(P.getConfig()) === before);
+}
+
 console.log('\n=== I. Cross-backend projection parity (server.js vs functions/_shared.js) ===');
 {
   // Compare the two hand-written clientPriceList implementations field-by-field.

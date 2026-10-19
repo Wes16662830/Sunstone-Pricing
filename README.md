@@ -61,6 +61,36 @@ Two views toggled in one app:
 - **Internal view (the "Internal Margin" tab)** — full cost, margin, contribution,
   step-cost, discount walk-down, and margin-floor data.
 
+### Scenario Planner (Internal Margin tab)
+
+For the question that actually comes up in a negotiation: *"they will only pay
+R200 a vehicle — can I make that work?"*
+
+Per product you set either a **discount %** or the **price the client will pay**;
+the other follows, and the row shows revenue, cost, contribution and gross margin
+live. Bundle and volume discounts can be overridden too — leaving a box blank
+means "use the schedule", which is deliberately **not** the same as entering 0
+(an explicit no-discount).
+
+A *How low can you go?* table gives the four prices that matter per product:
+breakeven, the 50% and 60% GM floors, and the target price (which is list — the
+price that hits the product's own target GM), plus the largest discount that
+still holds 50%.
+
+Two things worth knowing:
+
+- **Step costs are off by default**, matching the margin table above, which
+  treats them as advisory. Tick *Include step costs* before trusting a
+  large-fleet scenario: at 700 vehicles on Tracking, two crossed thresholds take
+  gross margin from 63% to 32%. The *Headroom to 50% GM* tile follows the toggle.
+- **It is a sandbox.** Overrides are saved with the quote so a part-finished
+  negotiation survives a reload, but they never reach the client quote, the price
+  list or the proposal, and `calcScenario` cannot mutate the shared config
+  (asserted in the test suite).
+
+Backed by `calcScenario()` in `pricing.js` — a pure function, so the planner
+agrees with the real quote by construction when no overrides are set.
+
 ### Proposal tab — Sunstone's standard proposal document
 
 The **Proposal** tab generates Sunstone's standard client proposal ("ControlHub
@@ -241,21 +271,33 @@ npx wrangler pages dev                                      # → http://localho
 
 `.dev.vars` and `.wrangler/` are gitignored; real secrets live only in Cloudflare.
 
-### Auto-deploy on push (GitHub Actions)
+### Auto-deploy on push
 
-`.github/workflows/deploy.yml` deploys to Cloudflare Pages on **every push**:
-push to `main` → production, push to any other branch → a preview URL. Cloudflare
-decides production vs preview from the branch name, so a feature branch is never
-forced into production.
+Two equivalent pipelines exist while the project is moving hosts. **Keep them in
+sync, and once GitLab is the only remote delete the GitHub workflow** — otherwise
+the same commit deploys twice.
 
-To arm it, add two **GitHub repo secrets** (Settings → Secrets and variables →
-Actions) — the only manual step, and it must be you since the token is tied to
-your Cloudflare account:
+| Host | File |
+|------|------|
+| GitLab (current target) | `.gitlab-ci.yml` — stages `test` then `deploy` |
+| GitHub | `.github/workflows/deploy.yml` |
 
-| Secret | Where to get it |
+Both deploy on **every push**: push to `main` → production, push to any other
+branch → a preview URL. Cloudflare decides production vs preview from the branch
+name, so a feature branch is never forced into production.
+
+Both read the same two credentials — GitLab CI/CD variables (Settings → CI/CD →
+Variables, add as **Masked**) or GitHub repo secrets (Settings → Secrets and
+variables → Actions):
+
+| Variable | Where to get it |
 |--------|-----------------|
-| `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard → My Profile → API Tokens → Create Token → grant **Cloudflare Pages: Edit** (and **D1: Edit** if you later run migrations from CI). |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard → My Profile → API Tokens → Create Token → grant **Cloudflare Pages: Edit** and **D1: Edit** (D1 edit lets CI list/create the database). |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard → right sidebar of any account page. |
+
+On GitLab, leave both **unprotected** if you want preview deploys from feature
+branches — a protected variable is only exposed on protected branches, so a
+feature-branch pipeline fails at the first `wrangler` call with an auth error.
 
 The app's `PASSWORD` and `SESSION_SECRET` are **Cloudflare Pages project secrets**
 (set once with `wrangler pages secret put`), not GitHub secrets — they persist on
