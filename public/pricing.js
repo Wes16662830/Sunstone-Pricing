@@ -542,6 +542,132 @@
   }
 
   // ---------------------------------------------------------------------------
+  // SCENARIO PLANNER — "the client will only pay X; does that work?"
+  //
+  // Recomputes subscription margin under manual overrides, so a deal can be
+  // tested against a price the client has named rather than the price the
+  // schedules produce. Pure: no DOM, no I/O, no mutation of the active config.
+  //
+  // Overrides, all optional, all honouring an explicit 0:
+  //   bundleOverride   fraction off list, replacing the bundle schedule
+  //   volumeOverride   fraction off list, replacing the volume tier
+  //   productOverride  { [key]: { price?, discount? } } — `price` is the unit
+  //                    price the client pays and wins over `discount`
+  //   includeStepCost  fold crossed step costs into cost and GM (default off,
+  //                    matching the Internal Margin table, which treats them
+  //                    as advisory)
+  // ---------------------------------------------------------------------------
+  function calcScenario(input) {
+    const inp = input || {};
+    const vehicles = Math.max(0, Number(inp.vehicles) || 0);
+    const users = Math.max(0, Number(inp.users) || 0);
+    const selected = inp.selected || {};
+    const ov = (inp.productOverride && typeof inp.productOverride === 'object') ? inp.productOverride : {};
+    const includeStepCost = !!inp.includeStepCost;
+    const products = activeConfig.products;
+    const stepCost = activeConfig.stepCost;
+
+    // A set override may legitimately be 0 (no discount), so test for
+    // null/undefined/'' rather than falsiness.
+    const set = (v) => v !== undefined && v !== null && v !== '';
+
+    const count = products.reduce((n, p) => n + ((selected[p.key] && p.bundleEligible) ? 1 : 0), 0);
+    const autoBundle = bundleMultiplier(count);
+    const autoVolume = volumeTier(vehicles);
+    const bundleDisc = set(inp.bundleOverride) ? (Number(inp.bundleOverride) || 0) : autoBundle.discount;
+    const volumeDisc = set(inp.volumeOverride) ? (Number(inp.volumeOverride) || 0) : autoVolume.discount;
+
+    const rows = products.map((p) => {
+      const list = listPrice(p);
+      const qty = billingQty(p, vehicles, users);
+      const isSel = !!selected[p.key];
+
+      // Schedule price for this product, respecting its discount eligibility.
+      const autoPrice = list
+        * (p.bundleEligible ? (1 - bundleDisc) : 1)
+        * (p.volumeEligible ? (1 - volumeDisc) : 1);
+
+      const o = ov[p.key] || {};
+      let effective = autoPrice;
+      let source = 'auto';
+      // Both paths clamp at 0: a discount typed as 500 (meaning 500%) would
+      // otherwise produce a negative price, and with it negative revenue and a
+      // nonsense gross margin.
+      if (set(o.price)) {
+        effective = Math.max(0, Number(o.price) || 0);
+        source = 'price';
+      } else if (set(o.discount)) {
+        effective = Math.max(0, list * (1 - (Number(o.discount) || 0)));
+        source = 'discount';
+      }
+
+      const revenue = isSel ? effective * qty : 0;
+      const baseCost = isSel ? p.marginalCost * qty : 0;
+      const stepCount = (isSel && p.stepThreshold > 0 && qty >= p.stepThreshold)
+        ? Math.floor(qty / p.stepThreshold) : 0;
+      const stepMonthly = stepCount * stepCost;
+      const monthlyCost = baseCost + (includeStepCost ? stepMonthly : 0);
+      const contribution = revenue - monthlyCost;
+      const grossMargin = revenue ? contribution / revenue : 0;
+
+      // The prices that matter when negotiating:
+      //   breakeven  — GM 0, you make nothing
+      //   floor50/60 — the margin floors the Internal Margin table already uses
+      //   targetPrice — list price, i.e. the price that hits the product's own
+      //                 target GM. Named so it reads as a goal, not a ceiling.
+      const floor50 = p.marginalCost * 2;
+      const floor60 = p.marginalCost / 0.4;
+      let floorStatus;
+      if (!isSel) floorStatus = 'n/a';
+      else if (effective < p.marginalCost) floorStatus = 'loss';
+      else if (effective < floor50) floorStatus = 'below50';
+      else if (effective < floor60) floorStatus = 'below60';
+      else floorStatus = 'healthy';
+
+      return {
+        key: p.key, name: p.name, quoteLabel: p.quoteLabel,
+        billing: p.billing, billingLabel: billingLabel(p.billing),
+        bundleEligible: p.bundleEligible, volumeEligible: p.volumeEligible,
+        selected: isSel, qty,
+        listPrice: list, autoPrice, effectivePrice: effective, source,
+        discount: list ? 1 - effective / list : 0,
+        revenue, annual: revenue * 12,
+        marginalCost: p.marginalCost, monthlyCost, baseCost,
+        stepCount, stepMonthly,
+        contribution, grossMargin,
+        targetGM: p.targetGM, targetPrice: list,
+        breakeven: p.marginalCost, floor50, floor60,
+        maxDiscount50: list ? Math.max(0, 1 - floor50 / list) : 0,
+        floorStatus,
+      };
+    });
+
+    const sel = rows.filter((r) => r.selected);
+    const totalRevenue = sel.reduce((s, r) => s + r.revenue, 0);
+    const totalCost = sel.reduce((s, r) => s + r.monthlyCost, 0);
+    const totalContribution = totalRevenue - totalCost;
+    const listRevenue = sel.reduce((s, r) => s + r.listPrice * r.qty, 0);
+
+    return {
+      vehicles, users, includeStepCost,
+      bundle: { discount: bundleDisc, auto: autoBundle.discount, overridden: set(inp.bundleOverride), count },
+      volume: { discount: volumeDisc, auto: autoVolume.discount, overridden: set(inp.volumeOverride), name: autoVolume.name },
+      rows,
+      totalRevenue, totalAnnual: totalRevenue * 12, totalCost, totalContribution,
+      totalGrossMargin: totalRevenue ? totalContribution / totalRevenue : 0,
+      listRevenue,
+      effectiveDiscount: listRevenue ? (listRevenue - totalRevenue) / listRevenue : 0,
+      perVehicle: vehicles ? totalRevenue / vehicles : 0,
+      // Deal-level floors, so "can I do this deal at all?" has an answer at the
+      // deal level and not only per product. Derived from totalCost rather than
+      // summing per-unit floors, so they move correctly when step costs are
+      // folded in (GM 50% means revenue = 2x cost, whatever makes up that cost).
+      breakevenRevenue: totalCost,
+      floor50Revenue: totalCost * 2,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // CLIENT QUOTE PROJECTION — client-safe whitelist (no cost/margin data)
   // ---------------------------------------------------------------------------
   function buildClientQuote(subscription, implementation, hardware) {
@@ -701,7 +827,7 @@
     listPrice, sellPrice, bundleMultiplier, volumeTier, pmt, round2,
     // calculators
     calcSubscription, calcHardware, calcImplementation, calcRental,
-    calcInternalMargin, buildClientQuote, calcDeal,
+    calcInternalMargin, buildClientQuote, calcDeal, calcScenario,
     // client-facing hardware (margin-safe)
     clientHardwareOptions, clientHardwareInput, clientHardwareProjection,
   };

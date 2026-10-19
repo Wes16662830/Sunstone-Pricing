@@ -65,6 +65,13 @@ function defaultDeal() {
     // No implementation activities pre-enabled by default — the user opts each one in.
     implementation: { activities: P.IMPL_ACTIVITIES.map((a) => ({ ...a, enabled: false })) },
     rental: { termMonths: 36, mode: 'Pure Rental' },
+    // Scenario planner state (Internal Margin tab). Saved with the quote so a
+    // negotiation you were part-way through survives a reload. Never read by
+    // the client quote, the price list or the proposal.
+    scenario: {
+      bundleOverride: null, volumeOverride: null,
+      productOverride: {}, includeStepCost: false, pinned: [],
+    },
     // Proposal narrative overrides. Each field is null until the user edits it,
     // in which case it holds their custom text; otherwise the auto-generated copy
     // is used. "Regenerate from deal" resets every field back to null.
@@ -95,6 +102,7 @@ function renderAll() {
   renderQuote();
   renderProposal();
   renderMargin();
+  renderScenario();
 }
 
 // --- SUBSCRIPTION -----------------------------------------------------------
@@ -754,6 +762,236 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// --- SCENARIO PLANNER -------------------------------------------------------
+// A sandbox on the Internal Margin tab for the question that actually comes up
+// in a negotiation: "they will only pay X — does that work?". Overrides live on
+// the deal (so they are saved with the quote) but never feed the client quote,
+// the proposal or any totals elsewhere; this reads the deal and writes nothing
+// back into the pricing config.
+
+function ensureScenario() {
+  if (!deal.scenario || typeof deal.scenario !== 'object') deal.scenario = {};
+  const d = deal.scenario;
+  if (!d.productOverride || typeof d.productOverride !== 'object') d.productOverride = {};
+  if (!Array.isArray(d.pinned)) d.pinned = [];
+  if (!('bundleOverride' in d)) d.bundleOverride = null;
+  if (!('volumeOverride' in d)) d.volumeOverride = null;
+  if (!('includeStepCost' in d)) d.includeStepCost = false;
+  return d;
+}
+
+// Percent <-> fraction. An empty box means "use the schedule", which is NOT the
+// same as 0% (an explicit no-discount), so empty must survive as null.
+const scnPctIn = (v) => (v === '' || v === null || v === undefined) ? null : (Number(v) || 0) / 100;
+const scnPctOut = (v) => (v === null || v === undefined) ? '' : String(Math.round(v * 1000) / 10);
+
+function scenarioResult() {
+  const sc = ensureScenario();
+  return P.calcScenario({
+    vehicles: deal.vehicles, users: deal.users, selected: deal.selected,
+    bundleOverride: sc.bundleOverride, volumeOverride: sc.volumeOverride,
+    productOverride: sc.productOverride, includeStepCost: sc.includeStepCost,
+  });
+}
+
+const SCN_STATUS = {
+  loss:     { label: '🚨 Loss-making', color: 'var(--bad)' },
+  below50:  { label: '🚨 Below 50% floor', color: 'var(--bad)' },
+  below60:  { label: '⚠ Below 60%', color: 'var(--warn)' },
+  healthy:  { label: '✓ Healthy', color: 'var(--good)' },
+  'n/a':    { label: '—', color: 'var(--text-mute)' },
+};
+
+function gmColor(gm) {
+  if (gm < 0.5) return 'var(--bad)';
+  if (gm < 0.6) return 'var(--warn)';
+  return 'var(--good)';
+}
+
+function renderScenario() {
+  const card = document.getElementById('scenario-card');
+  if (!card) return;
+  const sc = ensureScenario();
+  const s = scenarioResult();
+  const rows = s.rows.filter((r) => r.selected);
+
+  // Controls. Skip any input the user is mid-edit in, so re-rendering on each
+  // keystroke cannot fight their typing or move the caret.
+  const live = document.activeElement;
+  const setIf = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && el !== live) el.value = val;
+  };
+  setIf('scn-bundle', scnPctOut(sc.bundleOverride));
+  setIf('scn-volume', scnPctOut(sc.volumeOverride));
+  document.getElementById('scn-step').checked = !!sc.includeStepCost;
+  document.getElementById('scn-bundle-auto').textContent =
+    `schedule: ${pct(s.bundle.auto)} (${s.bundle.count} eligible)`;
+  document.getElementById('scn-volume-auto').textContent =
+    `schedule: ${pct(s.volume.auto)} (${s.volume.name})`;
+
+  // Per-product rows
+  const tb = document.getElementById('scn-tbody');
+  document.getElementById('scn-empty').style.display = rows.length ? 'none' : '';
+  tb.innerHTML = '';
+  rows.forEach((r) => {
+    const o = sc.productOverride[r.key] || {};
+    const st = SCN_STATUS[r.floorStatus] || SCN_STATUS['n/a'];
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(r.name)}<span class="scn-basis">${escapeHtml(r.billingLabel)}</span></td>
+      <td class="num">${r.qty}</td>
+      <td class="num">${cur(r.listPrice)}</td>
+      <td class="num"><input class="cell-input num scn-in" type="number" min="0" max="100" step="0.5"
+          data-scn-disc="${r.key}" placeholder="${(r.discount * 100).toFixed(1)}"
+          value="${o.discount === undefined || o.discount === null ? '' : Math.round(o.discount * 1000) / 10}"></td>
+      <td class="num"><input class="cell-input num scn-in" type="number" min="0" step="1"
+          data-scn-price="${r.key}" placeholder="${r.autoPrice.toFixed(2)}"
+          value="${o.price === undefined || o.price === null ? '' : o.price}"></td>
+      <td class="num">${cur(r.revenue)}</td>
+      <td class="num">${cur(r.monthlyCost)}${r.stepMonthly && sc.includeStepCost ? `<span class="scn-basis">incl. ${cur(r.stepMonthly, 0)} step</span>` : ''}</td>
+      <td class="num">${cur(r.contribution)}</td>
+      <td class="num" style="color:${gmColor(r.grossMargin)};font-weight:600">${pct(r.grossMargin)}</td>
+      <td style="color:${st.color}">${st.label}${r.stepCount && !sc.includeStepCost ? `<span class="scn-basis">${r.stepCount} step(s) ignored</span>` : ''}</td>`;
+    tb.appendChild(tr);
+  });
+
+  // Deal-level summary
+  const sum = document.getElementById('scn-summary');
+  if (!rows.length) { sum.innerHTML = ''; } else {
+    const headroom = s.totalRevenue - s.floor50Revenue;
+    sum.innerHTML = `
+      <div class="scn-tile scn-tile-lead">
+        <span>Blended GM</span>
+        <b style="color:${gmColor(s.totalGrossMargin)}">${pct(s.totalGrossMargin)}</b>
+        <small>${pct(s.effectiveDiscount)} off list</small>
+      </div>
+      <div class="scn-tile"><span>Revenue / mo</span><b>${fmtR(s.totalRevenue)}</b><small>${fmtR(s.totalAnnual)} / yr</small></div>
+      <div class="scn-tile"><span>Cost / mo</span><b>${fmtR(s.totalCost)}</b><small>${sc.includeStepCost ? 'incl. step costs' : 'step costs excluded'}</small></div>
+      <div class="scn-tile"><span>Contribution / mo</span><b>${fmtR(s.totalContribution)}</b><small>${fmtR(s.totalContribution * 12)} / yr</small></div>
+      <div class="scn-tile"><span>Headroom to 50% GM</span>
+        <b style="color:${headroom < 0 ? 'var(--bad)' : 'var(--good)'}">${fmtR(headroom)}</b>
+        <small>${headroom < 0 ? 'already below the floor' : 'before you hit the floor'}</small></div>`;
+  }
+
+  // Negotiation floors
+  const ftb = document.getElementById('scn-floors-tbody');
+  ftb.innerHTML = '';
+  rows.forEach((r) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(r.name)}</td>
+      <td class="num" style="color:var(--bad)">${cur(r.breakeven)}</td>
+      <td class="num">${cur(r.floor50)}</td>
+      <td class="num">${cur(r.floor60)}</td>
+      <td class="num">${cur(r.targetPrice)}</td>
+      <td class="num" style="color:${gmColor(r.grossMargin)};font-weight:600">${cur(r.effectivePrice)}</td>
+      <td class="num">${pct(r.maxDiscount50)}</td>`;
+    ftb.appendChild(tr);
+  });
+
+  renderPinned();
+}
+
+function renderPinned() {
+  const sc = ensureScenario();
+  const card = document.getElementById('scn-pinned-card');
+  const tb = document.getElementById('scn-pinned-tbody');
+  card.style.display = sc.pinned.length ? '' : 'none';
+  tb.innerHTML = '';
+  sc.pinned.forEach((p, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(p.name)}<span class="scn-basis">${escapeHtml(p.note || '')}</span></td>
+      <td class="num">${fmtR(p.revenue)}</td>
+      <td class="num">${fmtR(p.cost)}</td>
+      <td class="num">${fmtR(p.contribution)}</td>
+      <td class="num" style="color:${gmColor(p.gm)};font-weight:600">${pct(p.gm)}</td>
+      <td class="num">${pct(p.discount)}</td>
+      <td><button class="btn cfg-del" data-scn-unpin="${i}">Remove</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+function pinScenario() {
+  const sc = ensureScenario();
+  const s = scenarioResult();
+  if (!s.rows.some((r) => r.selected)) { alert('Select at least one product first.'); return; }
+  const name = prompt('Name this scenario', `Option ${sc.pinned.length + 1}`);
+  if (name === null) return;
+  // Describe what makes this scenario different, so a pinned row still means
+  // something an hour later.
+  const bits = [];
+  if (sc.bundleOverride !== null) bits.push(`bundle ${pct(sc.bundleOverride)}`);
+  if (sc.volumeOverride !== null) bits.push(`volume ${pct(sc.volumeOverride)}`);
+  Object.keys(sc.productOverride).forEach((k) => {
+    const o = sc.productOverride[k] || {};
+    const row = s.rows.find((r) => r.key === k);
+    if (!row || !row.selected) return;
+    if (o.price !== undefined && o.price !== null && o.price !== '') bits.push(`${row.name} @ ${cur(o.price)}`);
+    else if (o.discount !== undefined && o.discount !== null) bits.push(`${row.name} −${pct(o.discount)}`);
+  });
+  if (sc.includeStepCost) bits.push('incl. step costs');
+  sc.pinned.push({
+    name: (name || '').trim() || `Option ${sc.pinned.length + 1}`,
+    note: bits.join(' · ') || 'schedule pricing',
+    revenue: s.totalRevenue, cost: s.totalCost, contribution: s.totalContribution,
+    gm: s.totalGrossMargin, discount: s.effectiveDiscount,
+  });
+  renderPinned();
+}
+
+function wireScenario() {
+  const card = document.getElementById('scenario-card');
+  if (!card) return;
+
+  document.getElementById('scn-bundle').addEventListener('input', (e) => {
+    ensureScenario().bundleOverride = scnPctIn(e.target.value); renderScenario();
+  });
+  document.getElementById('scn-volume').addEventListener('input', (e) => {
+    ensureScenario().volumeOverride = scnPctIn(e.target.value); renderScenario();
+  });
+  document.getElementById('scn-step').addEventListener('change', (e) => {
+    ensureScenario().includeStepCost = e.target.checked; renderScenario();
+  });
+
+  // Delegated: the rows are re-rendered on every change.
+  document.getElementById('scn-tbody').addEventListener('input', (e) => {
+    const sc = ensureScenario();
+    const dk = e.target.dataset.scnDisc;
+    const pk = e.target.dataset.scnPrice;
+    const key = dk || pk;
+    if (!key) return;
+    const o = sc.productOverride[key] || (sc.productOverride[key] = {});
+    const v = e.target.value;
+    if (dk) {
+      // Discount and price are two views of the same number — setting one
+      // clears the other so there is never a stale value contradicting it.
+      o.discount = v === '' ? null : (Number(v) || 0) / 100;
+      o.price = null;
+    } else {
+      o.price = v === '' ? null : Math.max(0, Number(v) || 0);
+      o.discount = null;
+    }
+    if (o.discount === null && o.price === null) delete sc.productOverride[key];
+    renderScenario();
+  });
+
+  document.getElementById('scn-pin').addEventListener('click', pinScenario);
+  document.getElementById('scn-reset').addEventListener('click', () => {
+    const sc = ensureScenario();
+    sc.bundleOverride = null; sc.volumeOverride = null;
+    sc.productOverride = {}; sc.includeStepCost = false;
+    renderScenario();
+  });
+  document.getElementById('scn-pinned-tbody').addEventListener('click', (e) => {
+    const i = e.target.dataset.scnUnpin;
+    if (i === undefined) return;
+    ensureScenario().pinned.splice(Number(i), 1);
+    renderPinned();
+  });
+}
+
 // --- Sync DOM inputs from deal (after load) ---------------------------------
 function syncInputsFromDeal() {
   document.getElementById('in-customer').value = deal.customerName || '';
@@ -1411,6 +1649,7 @@ async function init() {
   wireInputs();
   wireConfig();
   wireClientLinks();
+  wireScenario();
   syncInputsFromDeal();
   renderConfig();
   recompute();

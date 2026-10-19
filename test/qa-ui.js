@@ -275,6 +275,90 @@ function check(name, cond, detail) {
   check('price list still lists all products', cfgPrices.products.every((x) => pd.includes(x.name)));
   check('customer name still interpolated', pd.includes('Trade Kings (Zim Kings)'));
 
+  console.log('\n=== 10c. Scenario planner (Internal Margin) ===');
+  await p.click('.tab[data-tab="subscription"]');
+  await p.waitForTimeout(200);
+  await p.fill('#in-vehicles', '120');
+  const scnBoxes = p.locator('#sub-tbody input[type=checkbox]');
+  for (let i = 0; i < await scnBoxes.count(); i++) {
+    if (!(await scnBoxes.nth(i).isChecked())) await scnBoxes.nth(i).check();
+  }
+  await p.waitForTimeout(500);
+  await p.click('.tab[data-tab="margin"]');
+  await p.waitForSelector('#scn-tbody tr');
+  const gmNow = async () => Number((await p.$eval('#scn-summary .scn-tile-lead b', (e) => e.innerText)).replace(/[^0-9.]/g, ''));
+  const revNow = async () => Number((await p.$eval('#scn-summary .scn-tile:nth-child(2) b', (e) => e.innerText)).replace(/[^0-9.]/g, ''));
+
+  const gmAuto = await gmNow();
+  check('scenario planner renders a blended GM', gmAuto > 0 && gmAuto < 100, String(gmAuto));
+  const scnRows = await p.locator('#scn-tbody tr').count();
+  check('one scenario row per selected product', scnRows === 5, String(scnRows));
+
+  // The headline use case: type the price the client will pay.
+  await p.locator('input[data-scn-price="tracking"]').fill('200');
+  await p.waitForTimeout(450);
+  const gmPriced = await gmNow();
+  check('naming a client price lowers blended GM', gmPriced < gmAuto, `${gmAuto} -> ${gmPriced}`);
+  check('the named price is held in its input',
+    (await p.inputValue('input[data-scn-price="tracking"]')) === '200');
+  // Find the row by product name: an earlier test reorders the config, so row
+  // position is not stable.
+  const trkRow = await p.locator('#scn-tbody tr').filter({ hasText: 'Tracking' }).first().innerText();
+  check('revenue follows the named price', /24[,.]000/.test(trkRow), trkRow.replace(/\n/g, ' '));
+  check('a thin margin is flagged', /Below|Loss/i.test(trkRow), trkRow.replace(/\n/g, ' '));
+
+  // Discount and price are two views of one number — setting one clears the other.
+  await p.locator('input[data-scn-disc="tracking"]').fill('25');
+  await p.waitForTimeout(450);
+  check('setting a discount clears the price override',
+    (await p.inputValue('input[data-scn-price="tracking"]')) === '');
+  const gmDisc = await gmNow();
+  check('discount override changes GM', gmDisc !== gmAuto, `${gmAuto} vs ${gmDisc}`);
+
+  // Pin it, so scenarios can be compared.
+  await p.click('#scn-pin');
+  await p.waitForTimeout(500);
+  check('pinned scenario is listed', (await p.locator('#scn-pinned-tbody tr').count()) === 1);
+  const pinTxt = await p.$eval('#scn-pinned-tbody', (e) => e.innerText);
+  check('pinned row records what made it different', /Tracking/.test(pinTxt), pinTxt.replace(/\n/g, ' '));
+
+  // Reset returns to schedule pricing but keeps the pins.
+  await p.click('#scn-reset');
+  await p.waitForTimeout(450);
+  check('reset restores the schedule GM', Math.abs((await gmNow()) - gmAuto) < 0.05, `${await gmNow()} vs ${gmAuto}`);
+  check('reset clears the per-product inputs',
+    (await p.inputValue('input[data-scn-disc="tracking"]')) === '');
+  check('reset keeps pinned scenarios', (await p.locator('#scn-pinned-tbody tr').count()) === 1);
+
+  // Step costs are the thing that quietly ruins a big deal.
+  await p.click('.tab[data-tab="subscription"]');
+  await p.fill('#in-vehicles', '700');
+  await p.waitForTimeout(450);
+  await p.click('.tab[data-tab="margin"]');
+  await p.waitForTimeout(450);
+  const gmBigOff = await gmNow(), revBig = await revNow();
+  await p.check('#scn-step');
+  await p.waitForTimeout(500);
+  const gmBigOn = await gmNow();
+  check('including step costs lowers GM at scale', gmBigOn < gmBigOff, `${gmBigOff} -> ${gmBigOn}`);
+  check('including step costs does not change revenue', Math.abs((await revNow()) - revBig) < 1, String(revBig));
+
+  // Negotiation floors table
+  const floors = await p.$eval('#scn-floors-tbody', (e) => e.innerText);
+  check('floors table lists the negotiation prices', /\d/.test(floors) && floors.split('\n').length >= 1);
+
+  // The planner is a sandbox: it must not leak into anything client-facing.
+  await p.click('.tab[data-tab="quote"]');
+  await p.waitForTimeout(400);
+  const quoteTxt = await p.$eval('.panel[data-panel="quote"]', (e) => e.innerText);
+  for (const k of ['Breakeven', 'GM %', 'Contribution', 'Marginal']) {
+    check(`client quote tab shows no "${k}"`, !quoteTxt.includes(k));
+  }
+  await p.click('.tab[data-tab="margin"]');
+  await p.waitForTimeout(300);
+  await p.uncheck('#scn-step');
+  await p.waitForTimeout(300);
+
   console.log('\n=== 11. Client links UI lifecycle ===');
   await p.click('.tab[data-tab="config"]');
   await p.waitForSelector('#link-create');

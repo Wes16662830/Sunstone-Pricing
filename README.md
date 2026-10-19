@@ -61,6 +61,36 @@ Two views toggled in one app:
 - **Internal view (the "Internal Margin" tab)** — full cost, margin, contribution,
   step-cost, discount walk-down, and margin-floor data.
 
+### Scenario Planner (Internal Margin tab)
+
+For the question that actually comes up in a negotiation: *"they will only pay
+R200 a vehicle — can I make that work?"*
+
+Per product you set either a **discount %** or the **price the client will pay**;
+the other follows, and the row shows revenue, cost, contribution and gross margin
+live. Bundle and volume discounts can be overridden too — leaving a box blank
+means "use the schedule", which is deliberately **not** the same as entering 0
+(an explicit no-discount).
+
+A *How low can you go?* table gives the four prices that matter per product:
+breakeven, the 50% and 60% GM floors, and the target price (which is list — the
+price that hits the product's own target GM), plus the largest discount that
+still holds 50%.
+
+Two things worth knowing:
+
+- **Step costs are off by default**, matching the margin table above, which
+  treats them as advisory. Tick *Include step costs* before trusting a
+  large-fleet scenario: at 700 vehicles on Tracking, two crossed thresholds take
+  gross margin from 63% to 32%. The *Headroom to 50% GM* tile follows the toggle.
+- **It is a sandbox.** Overrides are saved with the quote so a part-finished
+  negotiation survives a reload, but they never reach the client quote, the price
+  list or the proposal, and `calcScenario` cannot mutate the shared config
+  (asserted in the test suite).
+
+Backed by `calcScenario()` in `pricing.js` — a pure function, so the planner
+agrees with the real quote by construction when no overrides are set.
+
 ### Proposal tab — Sunstone's standard proposal document
 
 The **Proposal** tab generates Sunstone's standard client proposal ("ControlHub
