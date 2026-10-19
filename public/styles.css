@@ -436,3 +436,5 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
 .warn-ink { color: var(--warn); font-weight: 500; }
 /* Buttons that sit inside a card heading */
 .card h2 > .btn { float: right; font-size: 11px; padding: 4px 9px; margin-top: -2px; }
+/* "/unit" qualifiers in the scenario table headers — present but not shouting */
+.scn-unit { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-mute); }

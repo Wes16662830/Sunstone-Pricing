@@ -384,6 +384,48 @@ function check(name, cond, detail) {
   const gmDisc = await gmNow();
   check('discount override changes GM', gmDisc !== gmAuto, `${gmAuto} vs ${gmDisc}`);
 
+  // REGRESSION: the rows used to be rebuilt on every keystroke, which destroyed
+  // the input being typed in — focus was lost and only the first digit landed.
+  await p.click('#scn-reset');
+  await p.waitForTimeout(400);
+  const priceBox = p.locator('input[data-scn-price="tracking"]');
+  await priceBox.click();
+  for (const ch of '237') { await p.keyboard.type(ch); await p.waitForTimeout(150); }
+  await p.waitForTimeout(400);
+  check('a multi-digit price can be typed without losing the box',
+    (await priceBox.inputValue()) === '237', await priceBox.inputValue());
+  check('the price input keeps focus while typing',
+    await priceBox.evaluate((el) => el === document.activeElement));
+
+  // Prices are per unit, and in the DISPLAY currency — the engine works in ZAR,
+  // so a figure typed under USD must be read as USD, not as Rands.
+  const trkPriceRow = () => p.locator('#scn-tbody tr').filter({ hasText: 'Tracking' }).first().innerText();
+  const zarRow = await trkPriceRow();
+  check('revenue is unit price x quantity', /28[,.]440/.test(zarRow), zarRow.replace(/\n/g, ' '));
+  await p.selectOption('#currency-select', 'USD');
+  await p.waitForTimeout(700);
+  const usdShown = Number(await priceBox.inputValue());
+  check('switching currency converts the price shown', usdShown > 0 && usdShown < 237, String(usdShown));
+  await priceBox.fill('100');
+  await p.waitForTimeout(500);
+  const usdRow = await trkPriceRow();
+  check('a price typed under USD is read as USD', /12[,.]000/.test(usdRow), usdRow.replace(/\n/g, ' '));
+  await p.selectOption('#currency-select', 'ZAR');
+  await p.waitForTimeout(700);
+  const backInZar = Number(await priceBox.inputValue());
+  check('the stored price is held in ZAR, not the display currency',
+    backInZar > 1000, String(backInZar));
+  check('headers state the per-unit basis',
+    /\/unit/.test(await p.$eval('#scn-table thead', (e) => e.innerText)));
+  check('the planner names the currency being typed in',
+    /per unit/i.test(await p.$eval('#scn-unit-note', (e) => e.innerText)));
+  await p.click('#scn-reset');
+  await p.waitForTimeout(400);
+  // Put the override back: the pin test below expects a scenario that differs
+  // from schedule pricing, otherwise there is nothing for it to record.
+  await p.locator('input[data-scn-disc="tracking"]').fill('25');
+  await p.waitForTimeout(450);
+
   // Pin it, so scenarios can be compared.
   await p.click('#scn-pin');
   await p.waitForTimeout(500);
