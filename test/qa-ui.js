@@ -379,6 +379,48 @@ function check(name, cond, detail) {
   check('price list still lists all products', cfgPrices.products.every((x) => pd.includes(x.name)));
   check('customer name still interpolated', pd.includes('Trade Kings (Zim Kings)'));
 
+  console.log('\n=== 10b2. Product selection from the margin table ===');
+  // Scenario planning happens on this tab, so products can be picked here
+  // rather than hopping back to Subscription. It is one shared selection, not
+  // a copy — ticking in either place must show in both.
+  await p.click('.tab[data-tab="subscription"]');
+  await p.waitForTimeout(200);
+  await p.click('#sub-clear');
+  await p.waitForTimeout(400);
+  await p.click('.tab[data-tab="margin"]');
+  await p.waitForTimeout(400);
+  const scnCount = () => p.locator('#scn-tbody tr').count();
+  check('no scenario rows before anything is selected', (await scnCount()) === 0, String(await scnCount()));
+  await p.locator('input[data-margin-sel="tracking"]').check();
+  await p.waitForTimeout(500);
+  check('ticking in the margin table selects the product', (await scnCount()) === 1, String(await scnCount()));
+  check('focus stays on the box that was ticked',
+    (await p.evaluate(() => document.activeElement && document.activeElement.dataset
+      && document.activeElement.dataset.marginSel)) === 'tracking');
+  await p.click('.tab[data-tab="subscription"]');
+  await p.waitForTimeout(350);
+  check('the Subscription tab shows the same selection',
+    (await p.locator('#sub-tbody input[type=checkbox]:checked').count()) === 1);
+  // and the other way round
+  await p.locator('#sub-tbody tr').filter({ hasText: 'Route Builder' }).first().locator('input[type=checkbox]').check();
+  await p.waitForTimeout(500);
+  await p.click('.tab[data-tab="margin"]');
+  await p.waitForTimeout(350);
+  check('selecting on Subscription shows in the margin table',
+    await p.locator('input[data-margin-sel="routeBuilder"]').isChecked());
+  check('the planner picks up both products', (await scnCount()) === 2, String(await scnCount()));
+  await p.locator('input[data-margin-sel="tracking"]').uncheck();
+  await p.waitForTimeout(500);
+  check('unticking in the margin table deselects', (await scnCount()) === 1, String(await scnCount()));
+  const fleetBeforeClear = await p.inputValue('#in-vehicles');
+  await p.click('#margin-clear');
+  await p.waitForTimeout(500);
+  check('Clear all on the margin tab clears the selection',
+    (await p.locator('#margin-tbody input:checked').count()) === 0);
+  check('Clear all here leaves the fleet size alone',
+    (await p.inputValue('#in-vehicles')) === fleetBeforeClear,
+    `${fleetBeforeClear} -> ${await p.inputValue('#in-vehicles')}`);
+
   console.log('\n=== 10c. Scenario planner (Internal Margin) ===');
   await p.click('.tab[data-tab="subscription"]');
   await p.waitForTimeout(200);

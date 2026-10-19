@@ -216,7 +216,8 @@
       <div id="margin-content">
         <div class="banner banner-warn">INTERNAL — NOT FOR CLIENT. Cost &amp; margin data below. Use “Presentation mode” to hide this on screen during client meetings.</div>
         <div class="card">
-          <h2>Per-Product Margin Breakdown</h2>
+          <h2>Per-Product Margin Breakdown <button class="btn cfg-del" id="margin-clear" title="Untick every product. Fleet size, hardware and implementation are left alone.">✕ Clear all</button></h2>
+          <p class="note">Tick products here to build a scenario without leaving this tab — it is the same selection as the Subscription tab.</p>
           <table class="data" id="margin-table">
             <thead><tr><th>Product</th><th>Sel</th><th class="num">Revenue <span class="cur-tag"></span></th><th class="num">Marginal / unit <span class="cur-tag"></span></th><th class="num">Cost <span class="cur-tag"></span></th><th class="num">Contribution <span class="cur-tag"></span></th><th class="num">GM %</th><th>Step-Cost</th></tr></thead>
             <tbody id="margin-tbody"></tbody>
