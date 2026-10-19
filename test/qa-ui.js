@@ -426,20 +426,82 @@ function check(name, cond, detail) {
   await p.locator('input[data-scn-disc="tracking"]').fill('25');
   await p.waitForTimeout(450);
 
+  // NO MIXED CURRENCIES. Every money figure on the planner — table cells,
+  // summary tiles, negotiation floors, the editable price box and the pinned
+  // descriptions — must re-express together when the display currency changes.
+  // One figure left in Rands beside converted ones is the bug this guards.
+  await p.locator('input[data-scn-price="tracking"]').fill('200');
+  await p.waitForTimeout(500);
+  const moneyCells = async () => p.evaluate(() => {
+    const n = (t) => Number(String(t).replace(/[^0-9.\-]/g, '')) || 0;
+    const out = [];
+    document.querySelectorAll('#scn-tbody tr').forEach((r) => {
+      const td = [...r.querySelectorAll('td')];
+      [2, 5, 6, 7].forEach((i) => td[i] && out.push(n(td[i].innerText.split('\n')[0])));
+    });
+    document.querySelectorAll('#scn-summary .scn-tile b').forEach((e) => {
+      if (!/%/.test(e.innerText)) out.push(n(e.innerText));
+    });
+    document.querySelectorAll('#scn-floors-tbody tr').forEach((r) => {
+      const td = [...r.querySelectorAll('td')];
+      [1, 2, 3, 4, 5].forEach((i) => td[i] && out.push(n(td[i].innerText)));
+    });
+    out.push(n(document.querySelector('input[data-scn-price="tracking"]').value));
+    return out;
+  });
+  const inZar = await moneyCells();
+  await p.selectOption('#currency-select', 'USD');
+  await p.waitForTimeout(800);
+  const inUsd = await moneyCells();
+  check('the same money figures are shown in both currencies', inZar.length === inUsd.length,
+    `${inZar.length} vs ${inUsd.length}`);
+  const ratios = inZar.map((v, i) => (v && inUsd[i]) ? v / inUsd[i] : null).filter((r) => r !== null);
+  check('every money figure converts, none left behind', ratios.length > 10, String(ratios.length));
+  const spread = Math.max(...ratios) - Math.min(...ratios);
+  check('all money figures share ONE exchange rate (no mixing)', spread < 0.05,
+    `rates ${Math.min(...ratios).toFixed(2)}..${Math.max(...ratios).toFixed(2)}`);
+  // Percentages are ratios and must NOT move with the currency.
+  const gmUsd = await p.$eval('#scn-summary .scn-tile-lead b', (e) => e.innerText);
+  await p.selectOption('#currency-select', 'ZAR');
+  await p.waitForTimeout(800);
+  check('gross margin is unchanged by the display currency',
+    (await p.$eval('#scn-summary .scn-tile-lead b', (e) => e.innerText)) === gmUsd, gmUsd);
+  await p.click('#scn-reset');
+  await p.waitForTimeout(400);
+  await p.locator('input[data-scn-disc="tracking"]').fill('25');
+  await p.waitForTimeout(450);
+
   // Pin it, so scenarios can be compared.
   await p.click('#scn-pin');
   await p.waitForTimeout(500);
   check('pinned scenario is listed', (await p.locator('#scn-pinned-tbody tr').count()) === 1);
   const pinTxt = await p.$eval('#scn-pinned-tbody', (e) => e.innerText);
   check('pinned row records what made it different', /Tracking/.test(pinTxt), pinTxt.replace(/\n/g, ' '));
+  // A pinned description must not freeze the symbol it was created under.
+  await p.locator('input[data-scn-price="fuel"]').fill('250');
+  await p.waitForTimeout(450);
+  await p.click('#scn-pin');
+  await p.waitForTimeout(500);
+  const pinZar = await p.$eval('#scn-pinned-tbody', (e) => e.innerText);
+  await p.selectOption('#currency-select', 'USD');
+  await p.waitForTimeout(800);
+  const pinUsd = await p.$eval('#scn-pinned-tbody', (e) => e.innerText);
+  check('a pinned price is described in Rands under ZAR', /R\s*250/.test(pinZar), pinZar.replace(/\n/g, ' ').slice(0, 120));
+  check('the same pin is described in dollars under USD',
+    /\$/.test(pinUsd) && !/R\s*250/.test(pinUsd), pinUsd.replace(/\n/g, ' ').slice(0, 120));
+  await p.selectOption('#currency-select', 'ZAR');
+  await p.waitForTimeout(700);
 
   // Reset returns to schedule pricing but keeps the pins.
+  const pinsBeforeReset = await p.locator('#scn-pinned-tbody tr').count();
   await p.click('#scn-reset');
   await p.waitForTimeout(450);
   check('reset restores the schedule GM', Math.abs((await gmNow()) - gmAuto) < 0.05, `${await gmNow()} vs ${gmAuto}`);
   check('reset clears the per-product inputs',
     (await p.inputValue('input[data-scn-disc="tracking"]')) === '');
-  check('reset keeps pinned scenarios', (await p.locator('#scn-pinned-tbody tr').count()) === 1);
+  check('reset keeps pinned scenarios',
+    (await p.locator('#scn-pinned-tbody tr').count()) === pinsBeforeReset,
+    `${pinsBeforeReset} -> ${await p.locator('#scn-pinned-tbody tr').count()}`);
 
   // Step costs are the thing that quietly ruins a big deal.
   await p.click('.tab[data-tab="subscription"]');

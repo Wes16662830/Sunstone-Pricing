@@ -1045,6 +1045,20 @@ function renderScenario() {
   renderPinned();
 }
 
+// Format a pinned scenario's description in the CURRENT display currency.
+// `note` is the legacy string form kept for scenarios pinned before this was
+// stored structurally; those cannot be re-expressed, so they are shown as-is.
+function pinnedNote(p) {
+  if (!Array.isArray(p.bits)) return p.note || 'schedule pricing';
+  if (!p.bits.length) return 'schedule pricing';
+  return p.bits.map((b) => {
+    if (b.t === 'price') return `${b.label} @ ${fmtR(b.zar)}/unit`;
+    if (b.t === 'disc') return `${b.label} \u2212${pct(b.v)}`;
+    if (b.t === 'pct') return `${b.label} ${pct(b.v)}`;
+    return b.label;
+  }).join(' \u00b7 ');
+}
+
 function renderPinned() {
   const sc = ensureScenario();
   const card = document.getElementById('scn-pinned-card');
@@ -1054,7 +1068,7 @@ function renderPinned() {
   sc.pinned.forEach((p, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${escapeHtml(p.name)}<span class="scn-basis">${escapeHtml(p.note || '')}</span></td>
+      <td>${escapeHtml(p.name)}<span class="scn-basis">${escapeHtml(pinnedNote(p))}</span></td>
       <td class="num">${fmtR(p.revenue)}</td>
       <td class="num">${fmtR(p.cost)}</td>
       <td class="num">${fmtR(p.contribution)}</td>
@@ -1072,21 +1086,26 @@ function pinScenario() {
   const name = prompt('Name this scenario', `Option ${sc.pinned.length + 1}`);
   if (name === null) return;
   // Describe what makes this scenario different, so a pinned row still means
-  // something an hour later.
+  // something an hour later. Stored STRUCTURALLY with money in ZAR, never as a
+  // pre-formatted string: a note that baked in "$100/unit" at pin time would
+  // still say dollars after switching the display back to Rands.
   const bits = [];
-  if (sc.bundleOverride !== null) bits.push(`bundle ${pct(sc.bundleOverride)}`);
-  if (sc.volumeOverride !== null) bits.push(`volume ${pct(sc.volumeOverride)}`);
+  if (sc.bundleOverride !== null) bits.push({ t: 'pct', label: 'bundle', v: sc.bundleOverride });
+  if (sc.volumeOverride !== null) bits.push({ t: 'pct', label: 'volume', v: sc.volumeOverride });
   Object.keys(sc.productOverride).forEach((k) => {
     const o = sc.productOverride[k] || {};
     const row = s.rows.find((r) => r.key === k);
     if (!row || !row.selected) return;
-    if (o.price !== undefined && o.price !== null && o.price !== '') bits.push(`${row.name} @ ${fmtR(o.price)}/unit`);
-    else if (o.discount !== undefined && o.discount !== null) bits.push(`${row.name} −${pct(o.discount)}`);
+    if (o.price !== undefined && o.price !== null && o.price !== '') {
+      bits.push({ t: 'price', label: row.name, zar: o.price });
+    } else if (o.discount !== undefined && o.discount !== null) {
+      bits.push({ t: 'disc', label: row.name, v: o.discount });
+    }
   });
-  if (sc.includeStepCost) bits.push('incl. step costs');
+  if (sc.includeStepCost) bits.push({ t: 'flag', label: 'incl. step costs' });
   sc.pinned.push({
     name: (name || '').trim() || `Option ${sc.pinned.length + 1}`,
-    note: bits.join(' · ') || 'schedule pricing',
+    bits,
     revenue: s.totalRevenue, cost: s.totalCost, contribution: s.totalContribution,
     gm: s.totalGrossMargin, discount: s.effectiveDiscount,
   });
