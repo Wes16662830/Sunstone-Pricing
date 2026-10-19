@@ -81,8 +81,19 @@ function renderCurrencyOptions() {
 }
 
 function anyPerUser() { return catalog.products.some((p) => p.billing === 'perUser'); }
+function perUserNames() {
+  return catalog.products.filter((p) => p.billing === 'perUser').map((p) => p.name);
+}
 function updateUsersVisibility() {
-  document.getElementById('field-users').style.display = anyPerUser() ? '' : 'none';
+  const show = anyPerUser();
+  document.getElementById('field-users').style.display = show ? '' : 'none';
+  const hint = document.getElementById('users-hint');
+  if (hint && show) {
+    const names = perUserNames();
+    hint.textContent = `${names.join(' and ')} ${names.length > 1 ? 'are' : 'is'} priced per user. `
+      + 'One user is one person with their own login on the mobile app — count the people who '
+      + 'need it (drivers, warehouse staff), not your vehicles.';
+  }
 }
 
 function renderProducts() {
@@ -126,7 +137,7 @@ function renderHardware() {
   document.getElementById('hardware-list').innerHTML = catalog.hardware.length
     ? `<div class="hgroup">Equipment</div>${hwRows(catalog.hardware, 'hardware')}` : '';
   document.getElementById('install-list').innerHTML = catalog.install.length
-    ? `<div class="hgroup">Installation</div>${hwRows(catalog.install, 'install')}` : '';
+    ? `<div class="hgroup">Installation — fitting by our technicians</div>${hwRows(catalog.install, 'install')}` : '';
 }
 
 let lastQuote = null;
@@ -157,6 +168,26 @@ function renderResult(q) {
     <div class="rrow"><span><strong>Once-off total</strong></span><span class="v"><strong>${curR(h.onceOffTotal)}</strong></span></div>` : '';
 
   renderQuoteDoc(q);
+  updateInstallNudge(h);
+}
+
+// Equipment on the quote with no installation against it is the easy mistake
+// to make on this page: the two are separate line groups, and a client who has
+// never bought from us would not know fitting is quoted separately. Say so at
+// the moment it applies, rather than hoping they read the intro.
+function updateInstallNudge(h) {
+  const el = document.getElementById('install-nudge');
+  if (!el) return;
+  const hasEquipment = !!(h && h.rows && h.rows.length);
+  const hasInstall = !!(h && h.install && h.install.length);
+  const show = hasEquipment && !hasInstall && catalog.install.length > 0;
+  el.hidden = !show;
+  if (show) {
+    el.innerHTML = 'You have added equipment but no installation. '
+      + 'Most hardware needs fitting by a technician, and it is priced separately — '
+      + 'add the matching quantities under <strong>Installation</strong> above. '
+      + 'Skip this only if your own team will fit it.';
+  }
 }
 
 // Hardware + installation table for the printable quote, incl. the
