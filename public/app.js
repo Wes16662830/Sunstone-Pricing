@@ -44,7 +44,21 @@ const fmtR = (n, dp = 2) => curSym() + ' ' + cur(n, dp);
 const fxToDisplay = (zar) => (Number(zar) || 0) / fxDivisor();
 const fxToZar = (shown) => (Number(shown) || 0) * fxDivisor();
 // Trim to 2dp without trailing zeros, so an input shows 200 rather than 200.00.
-const fxInputValue = (zar) => String(Math.round(fxToDisplay(zar) * 100) / 100);
+// Unit prices need more than 2dp or they stop reconciling with the totals
+// beside them. Tracking's list price is R276.666… — at 2dp that reads R276.67,
+// and 276.67 x 120 vehicles is R33,200.40 against a true R33,200.00. Converting
+// magnifies it: in USD the same line shows a unit price of 14.95 next to
+// revenue of 1,794.59, while 14.95 x 120 is 1,794.00, 59c adrift.
+// So: UNIT prices print at DP_UNIT, totals stay at 2dp (real money, real cents).
+const DP_UNIT = 4;
+const curU = (n) => cur(n, DP_UNIT);
+const fmtRU = (n) => curSym() + ' ' + curU(n);
+// The scenario planner's editable price box: show the stored figure as it
+// really is, so switching currency and back cannot quietly shave it.
+const fxInputValue = (zar) => {
+  const v = fxToDisplay(zar);
+  return String(Math.round(v * 1e6) / 1e6);
+};
 
 // --- Deal state -------------------------------------------------------------
 function defaultDeal() {
@@ -206,8 +220,8 @@ function renderSubscription() {
       <td>${l.name}${excl ? ` <span class="note" style="margin:0">(${excl})</span>` : ''}</td>
       <td>${l.billingLabel}</td>
       <td class="num">${l.qty}</td>
-      <td class="num">${cur(l.listPrice)}</td>
-      <td class="num">${cur(l.effectivePrice)}</td>
+      <td class="num">${curU(l.listPrice)}</td>
+      <td class="num">${curU(l.effectivePrice)}</td>
       <td class="num">${cur(l.monthly)}</td>
       <td class="num">${cur(l.annual)}</td>`;
     tb.appendChild(tr);
@@ -305,7 +319,7 @@ function renderHardware() {
         <td><input type="checkbox" data-extra-key="${r.catalogKey}" ${r.include ? 'checked' : ''}></td>
         <td>${r.desc}</td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-extra-qty="${r.catalogKey}" value="${r.qty}"></td>
-        <td class="num">${cur(r.unit)}</td>
+        <td class="num">${curU(r.unit)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
     } else if (r.custom) {
       const i = Number(r.id.split(':')[1]);
@@ -313,7 +327,7 @@ function renderHardware() {
         <td><button class="btn cfg-del" data-custom-del="${i}" title="Remove">✕</button></td>
         <td><select class="cell-input" data-custom-key="${i}" style="min-width:180px">${catOpts(r.catalogKey)}</select> <span class="note" style="margin:0">one-off</span></td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-custom-qty="${i}" value="${r.qty}"></td>
-        <td class="num">${cur(r.unit)}</td>
+        <td class="num">${curU(r.unit)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
     } else {
       if (!r.include) tr.className = 'row-off';
@@ -321,7 +335,7 @@ function renderHardware() {
         <td><input type="checkbox" data-inc="${includeKey[r.id]}" ${r.include ? 'checked' : ''}></td>
         <td>${r.desc}</td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-base-qty="${r.id}" value="${r.qty}"></td>
-        <td class="num">${cur(r.unit)}</td>
+        <td class="num">${curU(r.unit)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
     }
     tb.appendChild(tr);
@@ -370,7 +384,7 @@ function renderHardware() {
       tr.innerHTML = `
         <td><input type="checkbox" data-instsel-key="${r.installKey}" ${r.include ? 'checked' : ''}> ${r.desc}</td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-instsel-qty="${r.installKey}" value="${r.qty}"></td>
-        <td class="num">${cur(r.rate)}</td>
+        <td class="num">${curU(r.rate)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
     } else if (r.custom) {
       const i = Number(r.id.split(':')[1]);
@@ -385,7 +399,7 @@ function renderHardware() {
       tr.innerHTML = `
         <td>${r.desc}</td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-baseinst-qty="${r.id}" value="${r.qty}"></td>
-        <td class="num">${cur(r.rate)}</td>
+        <td class="num">${curU(r.rate)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
     }
     itb.appendChild(tr);
@@ -436,7 +450,7 @@ function renderImplementation() {
       <td>${l.desc}</td>
       <td class="num"><input class="cell-input num" type="number" min="0" step="1" data-impl="${i}" data-f="hours" value="${l.hours}"></td>
       <td><input type="checkbox" data-impl="${i}" data-f="senior" ${l.senior ? 'checked' : ''}></td>
-      <td class="num">${cur(l.rate, 0)}</td>
+      <td class="num">${curU(l.rate)}</td>
       <td class="num"><input class="cell-input num" type="number" min="0" max="100" step="1" data-impl="${i}" data-f="discount" value="${Math.round(l.discount * 100)}"></td>
       <td class="num">${cur(l.total)}</td>
       <td>${status}</td>`;
@@ -498,11 +512,11 @@ function renderRental() {
 function renderQuote() {
   const q = result.clientQuote;
   const subRows = q.subscriptionItems.map((i) => `
-    <tr><td>${i.product}</td><td>${i.billingLabel}</td><td class="num">${i.qty}</td><td class="num">${cur(i.unitPrice)}</td><td class="num">${cur(i.monthly)}</td><td class="num">${cur(i.annual)}</td></tr>`).join('');
+    <tr><td>${i.product}</td><td>${i.billingLabel}</td><td class="num">${i.qty}</td><td class="num">${curU(i.unitPrice)}</td><td class="num">${cur(i.monthly)}</td><td class="num">${cur(i.annual)}</td></tr>`).join('');
   const implRows = q.implementationItems.map((i) => `
     <tr><td>${i.desc}</td><td class="num">${i.hours}</td><td class="num">${cur(i.rate, 0)}</td><td class="num">${i.discount ? pct(i.discount, 0) : ''}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
   const hwRows = q.hardwareItems.map((i) => `
-    <tr><td>${i.desc}</td><td class="num">${i.qty ?? ''}</td><td class="num">${i.unit != null ? cur(i.unit) : ''}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
+    <tr><td>${i.desc}</td><td class="num">${i.qty ?? ''}</td><td class="num">${i.unit != null ? curU(i.unit) : ''}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
 
   document.getElementById('quote-doc').innerHTML = `
     <h1>SUNSTONE LOGISTIC SYSTEMS</h1>
@@ -839,7 +853,7 @@ function renderMargin() {
       <td style="text-align:center"><input type="checkbox" data-margin-sel="${r.key}" ${r.selected ? 'checked' : ''}
           title="Include ${escapeHtml(r.name)} in the quote — the same tick as on the Subscription tab"></td>
       <td class="num">${cur(r.revenue)}</td>
-      <td class="num">${cur(r.marginalCost, 0)}</td>
+      <td class="num">${curU(r.marginalCost)}</td>
       <td class="num">${cur(r.monthlyCost)}</td>
       <td class="num">${cur(r.contribution)}</td>
       <td class="num">${pct(r.grossMargin)}</td>
@@ -881,10 +895,10 @@ function renderMargin() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${r.name}<span class="row-basis">${escapeHtml(r.billingLabel || '')}</span></td>
-      <td class="num">${cur(r.marginalCost, 0)}</td>
-      <td class="num">${cur(r.floor50)}</td>
-      <td class="num">${cur(r.floor60)}</td>
-      <td class="num">${cur(r.effectivePrice)}</td>
+      <td class="num">${curU(r.marginalCost)}</td>
+      <td class="num">${curU(r.floor50)}</td>
+      <td class="num">${curU(r.floor60)}</td>
+      <td class="num">${curU(r.effectivePrice)}</td>
       <td style="color:${color}">${r.floorStatus}</td>`;
     ftb.appendChild(tr);
   });
@@ -1015,7 +1029,7 @@ function renderScenario() {
     const st = SCN_STATUS[r.floorStatus] || SCN_STATUS['n/a'];
     const cell = (n) => tr.querySelector(`[data-c="${n}"]`);
     cell('qty').textContent = r.qty;
-    cell('list').textContent = cur(r.listPrice);
+    cell('list').textContent = curU(r.listPrice);
     cell('rev').textContent = cur(r.revenue);
     cell('cost').innerHTML = cur(r.monthlyCost) +
       (r.stepMonthly && sc.includeStepCost ? `<span class="scn-basis">incl. ${cur(r.stepMonthly, 0)} step</span>` : '');
@@ -1063,11 +1077,11 @@ function renderScenario() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${escapeHtml(r.name)}</td>
-      <td class="num" style="color:var(--bad)">${cur(r.breakeven)}</td>
-      <td class="num">${cur(r.floor50)}</td>
-      <td class="num">${cur(r.floor60)}</td>
-      <td class="num">${cur(r.targetPrice)}</td>
-      <td class="num" style="color:${gmColor(r.grossMargin)};font-weight:600">${cur(r.effectivePrice)}</td>
+      <td class="num" style="color:var(--bad)">${curU(r.breakeven)}</td>
+      <td class="num">${curU(r.floor50)}</td>
+      <td class="num">${curU(r.floor60)}</td>
+      <td class="num">${curU(r.targetPrice)}</td>
+      <td class="num" style="color:${gmColor(r.grossMargin)};font-weight:600">${curU(r.effectivePrice)}</td>
       <td class="num">${pct(r.maxDiscount50)}</td>`;
     ftb.appendChild(tr);
   });
@@ -1083,7 +1097,7 @@ function pinnedNote(p) {
   if (!Array.isArray(p.bits)) return p.note || 'schedule pricing';
   if (!p.bits.length) return 'schedule pricing';
   return p.bits.map((b) => {
-    if (b.t === 'price') return `${b.label} @ ${fmtR(b.zar)}/unit`;
+    if (b.t === 'price') return `${b.label} @ ${fmtRU(b.zar)}/unit`;
     if (b.t === 'disc') return `${b.label} \u2212${pct(b.v)}`;
     if (b.t === 'pct') return `${b.label} ${pct(b.v)}`;
     return b.label;
@@ -1150,7 +1164,7 @@ function renderTarget() {
       <td>${escapeHtml(r.name)}<span class="scn-basis">${escapeHtml(r.billingLabel)}</span></td>
       <td class="num">${r.qty}</td>
       <td class="num">${pct(r.share)}</td>
-      <td class="num">${cur(r.unitPrice)}</td>
+      <td class="num">${curU(r.unitPrice)}</td>
       <td class="num">${pct(r.discount)}</td>
       <td class="num">${cur(r.revenue)}</td>
       <td class="num" style="color:${gmColor(sr.grossMargin)};font-weight:600">${pct(sr.grossMargin)}</td>

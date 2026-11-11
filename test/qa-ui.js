@@ -118,6 +118,46 @@ function check(name, cond, detail) {
     (await p.locator('#sub-tbody input[type=checkbox]:checked').count()) === 0);
   check('Clear all leaves the fleet size alone', (await p.inputValue('#in-vehicles')) === '10');
 
+  console.log('\n=== 2b2. Unit prices reconcile with their totals ===');
+  // A unit price printed at 2dp stops agreeing with the total beside it.
+  // Tracking lists at R276.666… — "276.67" x 120 vehicles is R33,200.40 against
+  // a true R33,200.00, and converting magnifies it: at 2dp the USD line showed
+  // a unit price of 14.95 next to revenue of 1,794.59, 59c adrift. Unit columns
+  // now print more decimal places so the arithmetic on screen holds.
+  await p.click('.tab[data-tab="subscription"]');
+  await p.waitForTimeout(200);
+  await p.click('#sub-clear');
+  await p.fill('#in-vehicles', '120');
+  await p.locator('#sub-tbody tr').filter({ hasText: 'Tracking' }).first().locator('input[type=checkbox]').check();
+  await p.waitForTimeout(600);
+  const asNum = (t) => Number(String(t).replace(/[^0-9.\-]/g, '')) || 0;
+  for (const code of ['ZAR', 'USD']) {
+    await p.selectOption('#currency-select', code);
+    await p.waitForTimeout(600);
+    const cells = await p.$eval('#sub-tbody tr', (e) => [...e.querySelectorAll('td')].map((t) => t.innerText.trim()));
+    const unit = asNum(cells[5]);
+    const monthly = asNum(cells[6]);
+    check(`${code}: effective unit price x qty equals the monthly shown`,
+      Math.abs(unit * 120 - monthly) < 0.05, `${unit} x 120 = ${(unit * 120).toFixed(2)} vs ${monthly}`);
+    check(`${code}: the unit price is not truncated to 2dp`,
+      /\.\d{3,}/.test(cells[5]) || Number.isInteger(unit * 100), cells[5]);
+  }
+  await p.selectOption('#currency-select', 'ZAR');
+  await p.waitForTimeout(500);
+  // The same rule on the margin tab, where marginal cost is a per-unit figure.
+  await p.click('.tab[data-tab="margin"]');
+  await p.waitForTimeout(400);
+  const mRow = (await p.$$eval('#margin-tbody tr', (rs) => rs
+    .filter((r) => r.querySelector('input[data-margin-sel]') && r.querySelector('input[data-margin-sel]').checked)
+    .map((r) => [...r.querySelectorAll('td')].map((t) => t.innerText.split('\n')[0].trim()))))[0];
+  if (mRow) {
+    check('margin: marginal/unit x qty equals the cost shown',
+      Math.abs(asNum(mRow[3]) * 120 - asNum(mRow[4])) < 0.05,
+      `${mRow[3]} x 120 = ${(asNum(mRow[3]) * 120).toFixed(2)} vs ${mRow[4]}`);
+  }
+  await p.click('.tab[data-tab="subscription"]');
+  await p.waitForTimeout(250);
+
   console.log('\n=== 2c. Currency labelling on money columns ===');
   // Table CELLS deliberately carry no symbol — a symbol on every row of a dense
   // numeric table is noise — so the HEADER is what tells the reader which
