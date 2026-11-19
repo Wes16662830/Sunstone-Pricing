@@ -923,6 +923,7 @@ function ensureScenario() {
   if (!('bundleOverride' in d)) d.bundleOverride = null;
   if (!('volumeOverride' in d)) d.volumeOverride = null;
   if (!('includeStepCost' in d)) d.includeStepCost = false;
+  if (!d.hardwareOverride || typeof d.hardwareOverride !== 'object') d.hardwareOverride = {};
   if (!d.target || typeof d.target !== 'object') {
     d.target = { amount: null, mode: 'perVehicle', basis: 'cost' };
   }
@@ -949,6 +950,18 @@ const SCN_STATUS = {
   below60:  { label: '⚠ Below 60%', color: 'var(--warn)' },
   healthy:  { label: '✓ Healthy', color: 'var(--good)' },
   'n/a':    { label: '—', color: 'var(--text-mute)' },
+};
+
+// Hardware floors are NOT the subscription ones. Subscription is measured
+// against fixed 50%/60% gross-margin floors; hardware only ever earns the
+// markup (20% at a 25% markup), so "below 50%" would be nonsense here. These
+// bands are relative to the margin the item carries at list.
+const SCN_HW_STATUS = {
+  loss:    { label: '🚨 Below cost', color: 'var(--bad)' },
+  below50: { label: '🚨 Margin more than halved', color: 'var(--bad)' },
+  below60: { label: '⚠ Under list margin', color: 'var(--warn)' },
+  healthy: { label: '✓ Full list margin', color: 'var(--good)' },
+  'n/a':   { label: '—', color: 'var(--text-mute)' },
 };
 
 function gmColor(gm) {
@@ -1087,6 +1100,7 @@ function renderScenario() {
   });
 
   renderTarget();
+  renderHardwareScenario();
   renderPinned();
 }
 
@@ -1208,6 +1222,105 @@ function applyTarget() {
   recompute();
 }
 
+// Hardware margin, kept apart from the subscription figures above. Hardware is
+// a once-off sale and subscription is monthly: R/month and R once are not the
+// same unit, so they are never averaged into one margin.
+function hardwareScenarioResult() {
+  const sc = ensureScenario();
+  return P.calcHardwareScenario({
+    hardware: { ...(deal.hardware || {}), vehicles: deal.vehicles },
+    override: sc.hardwareOverride,
+  });
+}
+
+function renderHardwareScenario() {
+  const tb = document.getElementById('scn-hw-tbody');
+  if (!tb) return;
+  const sc = ensureScenario();
+  const h = hardwareScenarioResult();
+  const live = document.activeElement;
+
+  document.getElementById('scn-hw-note').innerHTML =
+    `Hardware sells at cost + <strong>${pct(h.markup)}</strong> markup, which is <strong>${pct(h.rows.length ? h.rows[0].listGM : 0)}</strong> gross margin at list — far thinner than subscription, so a discount here bites quickly. ` +
+    'Installation and shipping have a rate but <strong>no cost in the configuration</strong>, so their margin cannot be worked out; they are listed below as revenue only and left out of the GM.';
+
+  document.getElementById('scn-hw-empty').style.display = h.rows.length ? 'none' : '';
+
+  const sig = h.rows.map((r) => r.id).join('|') + '#' + displayCurrency;
+  if (tb.dataset.sig !== sig) {
+    tb.dataset.sig = sig;
+    tb.innerHTML = h.rows.map((r) => `
+      <tr data-scn-hwrow="${escapeHtml(r.id)}">
+        <td>${escapeHtml(r.desc)}</td>
+        <td class="num" data-c="qty"></td>
+        <td class="num" data-c="cost1"></td>
+        <td class="num" data-c="list"></td>
+        <td class="num"><input class="cell-input num scn-in" type="number" min="0" max="100" step="0.5"
+            data-scn-hwdisc="${escapeHtml(r.id)}"></td>
+        <td class="num"><input class="cell-input num scn-in" type="number" min="0" step="any"
+            data-scn-hwprice="${escapeHtml(r.id)}"></td>
+        <td class="num" data-c="rev"></td>
+        <td class="num" data-c="cost"></td>
+        <td class="num" data-c="contrib"></td>
+        <td class="num" data-c="gm"></td>
+        <td data-c="status"></td>
+      </tr>`).join('');
+  }
+  h.rows.forEach((r) => {
+    const tr = tb.querySelector(`tr[data-scn-hwrow="${CSS.escape(r.id)}"]`);
+    if (!tr) return;
+    const o = sc.hardwareOverride[r.id] || {};
+    const st = SCN_HW_STATUS[r.floorStatus] || SCN_HW_STATUS['n/a'];
+    const cell = (n) => tr.querySelector(`[data-c="${n}"]`);
+    cell('qty').textContent = r.qty;
+    cell('cost1').textContent = curU(r.unitCost);
+    cell('list').textContent = curU(r.listPrice);
+    cell('rev').textContent = cur(r.revenue);
+    cell('cost').textContent = cur(r.cost);
+    cell('contrib').textContent = cur(r.contribution);
+    cell('gm').textContent = pct(r.grossMargin);
+    cell('gm').style.color = r.grossMargin < 0 ? 'var(--bad)' : r.grossMargin < r.listGM ? 'var(--warn)' : 'var(--good)';
+    cell('gm').style.fontWeight = '600';
+    cell('status').textContent = st.label;
+    cell('status').style.color = st.color;
+    const di = tr.querySelector('[data-scn-hwdisc]');
+    const pi = tr.querySelector('[data-scn-hwprice]');
+    di.placeholder = (r.discount * 100).toFixed(1);
+    pi.placeholder = fxInputValue(r.listPrice);
+    if (di !== live) di.value = (o.discount === undefined || o.discount === null) ? '' : String(Math.round(o.discount * 1000) / 10);
+    if (pi !== live) pi.value = (o.price === undefined || o.price === null) ? '' : fxInputValue(o.price);
+  });
+
+  // Totals, clearly once-off.
+  const sum = document.getElementById('scn-hw-summary');
+  sum.innerHTML = h.rows.length ? `
+    <div class="scn-tile scn-tile-lead">
+      <span>Hardware GM</span>
+      <b style="color:${h.grossMargin < 0 ? 'var(--bad)' : h.grossMargin < h.rows[0].listGM ? 'var(--warn)' : 'var(--good)'}">${pct(h.grossMargin)}</b>
+      <small>${pct(h.discount)} off list</small>
+    </div>
+    <div class="scn-tile"><span>Hardware revenue</span><b>${fmtR(h.revenue)}</b><small>once-off</small></div>
+    <div class="scn-tile"><span>Hardware cost</span><b>${fmtR(h.cost)}</b><small>at ${pct(h.markup)} markup</small></div>
+    <div class="scn-tile"><span>Contribution</span><b>${fmtR(h.contribution)}</b><small>once-off</small></div>
+    <div class="scn-tile"><span>Once-off invoice</span><b>${fmtR(h.onceOffTotal)}</b><small>incl. ${fmtR(h.noCostRevenue)} pass-through</small></div>` : '';
+
+  // Pass-through lines: revenue we charge with no cost recorded against it.
+  const pt = document.getElementById('scn-hw-passthru');
+  pt.innerHTML = h.noCost.length ? `
+    <h3 class="scn-h3">Charged, but no cost configured</h3>
+    <p class="note">These carry a rate with no cost behind it, so no margin can be calculated for them. They are in the once-off invoice above but <strong>not</strong> in the hardware GM — add costs in Config if you want them to count.</p>
+    <table class="data">
+      <thead><tr><th>Line</th><th class="num">Qty</th><th class="num">Rate <span class="scn-unit">/unit</span> ${escapeHtml(curSym() + ' ' + displayCurrency)}</th><th class="num">Revenue ${escapeHtml(curSym() + ' ' + displayCurrency)}</th></tr></thead>
+      <tbody>${h.noCost.map((r) => `
+        <tr><td>${escapeHtml(r.desc)}</td>
+          <td class="num">${r.qty == null ? '—' : r.qty}</td>
+          <td class="num">${r.unit == null ? '—' : curU(r.unit)}</td>
+          <td class="num">${cur(r.revenue)}</td></tr>`).join('')}
+        <tr class="total"><td>Total pass-through</td><td></td><td></td><td class="num">${cur(h.noCostRevenue)}</td></tr>
+      </tbody>
+    </table>` : '';
+}
+
 function renderPinned() {
   const sc = ensureScenario();
   const card = document.getElementById('scn-pinned-card');
@@ -1312,11 +1425,25 @@ function wireScenario() {
     renderTarget();
   });
   document.getElementById('scn-tgt-apply').addEventListener('click', applyTarget);
+  document.getElementById('scn-hw-tbody').addEventListener('input', (e) => {
+    const sc = ensureScenario();
+    const dk = e.target.dataset.scnHwdisc;
+    const pk = e.target.dataset.scnHwprice;
+    const key = dk || pk;
+    if (!key) return;
+    const o = sc.hardwareOverride[key] || (sc.hardwareOverride[key] = {});
+    const v = e.target.value;
+    if (dk) { o.discount = v === '' ? null : (Number(v) || 0) / 100; o.price = null; }
+    else { o.price = v === '' ? null : Math.max(0, fxToZar(v)); o.discount = null; }
+    if (o.discount === null && o.price === null) delete sc.hardwareOverride[key];
+    renderHardwareScenario();
+  });
   document.getElementById('scn-pin').addEventListener('click', pinScenario);
   document.getElementById('scn-reset').addEventListener('click', () => {
     const sc = ensureScenario();
     sc.bundleOverride = null; sc.volumeOverride = null;
     sc.productOverride = {}; sc.includeStepCost = false;
+    sc.hardwareOverride = {};
     sc.target = { amount: null, mode: 'perVehicle', basis: 'cost' };
     renderScenario();
   });

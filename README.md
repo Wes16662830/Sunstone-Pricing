@@ -90,6 +90,22 @@ Both reach the same total and the same blended margin; only the split between
 products differs. A product with zero quantity (a per-user product with no
 users) is reported as skipped rather than silently absorbing budget.
 
+**Hardware is in the planner too**, as its own section. Each item carries a real
+cost (sell price is cost × `hardwareMarkup`), so discounting it shows a true
+margin — and that margin is thin: a 25% markup is only **20% gross margin at
+list**, so 15% off leaves under 6% and a 30% discount sells below cost. Status
+bands here are measured against the list margin, not the 50/60% subscription
+floors, which would be meaningless for hardware.
+
+**Installation and international shipping carry a rate but no cost anywhere in
+the config**, so their margin cannot be calculated. They are listed separately as
+revenue only and deliberately left out of the hardware GM — counting them as
+pure profit would overstate the deal. Add costs in Config if you want them in
+the margin.
+
+Monthly and once-off figures are **never blended into one margin**: R/month and
+R once are not the same unit.
+
 A *How low can you go?* table gives the four prices that matter per product:
 breakeven, the 50% and 60% GM floors, and the target price (which is list — the
 price that hits the product's own target GM), plus the largest discount that

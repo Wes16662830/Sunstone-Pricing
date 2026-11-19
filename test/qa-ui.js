@@ -12,6 +12,28 @@ const BASE = process.env.BASE || 'http://127.0.0.1:4200';
 const STAFF = 'staffpw', CLIENT = 'clientpw';
 
 let pass = 0, fail = 0; const findings = [];
+
+// Parse a money string the PAGE produced, whatever locale the browser formats
+// in. en-ZA has been seen as both "28,440.00" and "28 440,00" across container
+// images, and a parser that assumes one of them silently reads 28 440,00 as
+// 2844000. Rule: the last separator is the decimal point, unless it is followed
+// by exactly three digits (then every separator is a thousands separator).
+function parseMoney(text) {
+  const t = String(text == null ? '' : text).replace(/[^0-9.,\-]/g, '');
+  if (!t) return 0;
+  const neg = t.startsWith('-');
+  const body = neg ? t.slice(1) : t;
+  const cut = Math.max(body.lastIndexOf('.'), body.lastIndexOf(','));
+  let v;
+  if (cut === -1) v = Number(body) || 0;
+  else {
+    const frac = body.slice(cut + 1);
+    v = /^\d{3}$/.test(frac)
+      ? Number(body.replace(/[.,]/g, '')) || 0
+      : Number(body.slice(0, cut).replace(/[.,]/g, '') + '.' + frac) || 0;
+  }
+  return neg ? -v : v;
+}
 function check(name, cond, detail) {
   if (cond) pass++; else { fail++; findings.push(name + (detail ? ' — ' + detail : '')); console.log('  ✗ FAIL:', name, detail || ''); }
 }
@@ -44,7 +66,7 @@ function check(name, cond, detail) {
   const subChecked = await p.$$eval('#sub-tbody input[type=checkbox]:checked', (e) => e.length);
   check('no products pre-selected', subChecked === 0, `${subChecked} checked`);
   const monthly = await p.$eval('#sub-summary', (el) => el.innerText);
-  check('zero-state totals show 0', /0\.00/.test(monthly), monthly.replace(/\s+/g, ' ').slice(0, 80));
+  check('zero-state totals show 0', /0[.,]00/.test(monthly), monthly.replace(/\s+/g, ' ').slice(0, 80));
   await p.click('.tab[data-tab="implementation"]');
   const implChecked = await p.$$eval('#impl-tbody input[data-f="enabled"]:checked', (e) => e.length);
   check('no implementation activities pre-enabled', implChecked === 0, `${implChecked} enabled`);
@@ -130,17 +152,20 @@ function check(name, cond, detail) {
   await p.fill('#in-vehicles', '120');
   await p.locator('#sub-tbody tr').filter({ hasText: 'Tracking' }).first().locator('input[type=checkbox]').check();
   await p.waitForTimeout(600);
-  const asNum = (t) => Number(String(t).replace(/[^0-9.\-]/g, '')) || 0;
   for (const code of ['ZAR', 'USD']) {
     await p.selectOption('#currency-select', code);
     await p.waitForTimeout(600);
-    const cells = await p.$eval('#sub-tbody tr', (e) => [...e.querySelectorAll('td')].map((t) => t.innerText.trim()));
-    const unit = asNum(cells[5]);
-    const monthly = asNum(cells[6]);
+    // Pick the row by product: an earlier test reorders the config, so row
+    // position is not stable.
+    const cells = await p.locator('#sub-tbody tr').filter({ hasText: 'Tracking' }).first()
+      .evaluate((e) => [...e.querySelectorAll('td')].map((t) => t.innerText.trim()));
+    const unit = parseMoney(cells[5]);
+    const monthly = parseMoney(cells[6]);
     check(`${code}: effective unit price x qty equals the monthly shown`,
       Math.abs(unit * 120 - monthly) < 0.05, `${unit} x 120 = ${(unit * 120).toFixed(2)} vs ${monthly}`);
+    // More than 2 decimals, whichever character this locale uses for the point.
     check(`${code}: the unit price is not truncated to 2dp`,
-      /\.\d{3,}/.test(cells[5]) || Number.isInteger(unit * 100), cells[5]);
+      /[.,]\d{3,}/.test(cells[5]), cells[5]);
   }
   await p.selectOption('#currency-select', 'ZAR');
   await p.waitForTimeout(500);
@@ -152,8 +177,8 @@ function check(name, cond, detail) {
     .map((r) => [...r.querySelectorAll('td')].map((t) => t.innerText.split('\n')[0].trim()))))[0];
   if (mRow) {
     check('margin: marginal/unit x qty equals the cost shown',
-      Math.abs(asNum(mRow[3]) * 120 - asNum(mRow[4])) < 0.05,
-      `${mRow[3]} x 120 = ${(asNum(mRow[3]) * 120).toFixed(2)} vs ${mRow[4]}`);
+      Math.abs(parseMoney(mRow[3]) * 120 - parseMoney(mRow[4])) < 0.05,
+      `${mRow[3]} x 120 = ${(parseMoney(mRow[3]) * 120).toFixed(2)} vs ${mRow[4]}`);
   }
   await p.click('.tab[data-tab="subscription"]');
   await p.waitForTimeout(250);
@@ -472,8 +497,8 @@ function check(name, cond, detail) {
   await p.waitForTimeout(500);
   await p.click('.tab[data-tab="margin"]');
   await p.waitForSelector('#scn-tbody tr');
-  const gmNow = async () => Number((await p.$eval('#scn-summary .scn-tile-lead b', (e) => e.innerText)).replace(/[^0-9.]/g, ''));
-  const revNow = async () => Number((await p.$eval('#scn-summary .scn-tile:nth-child(2) b', (e) => e.innerText)).replace(/[^0-9.]/g, ''));
+  const gmNow = async () => parseMoney(await p.$eval('#scn-summary .scn-tile-lead b', (e) => e.innerText));
+  const revNow = async () => parseMoney(await p.$eval('#scn-summary .scn-tile:nth-child(2) b', (e) => e.innerText));
 
   const gmAuto = await gmNow();
   check('scenario planner renders a blended GM', gmAuto > 0 && gmAuto < 100, String(gmAuto));
@@ -490,7 +515,7 @@ function check(name, cond, detail) {
   // Find the row by product name: an earlier test reorders the config, so row
   // position is not stable.
   const trkRow = await p.locator('#scn-tbody tr').filter({ hasText: 'Tracking' }).first().innerText();
-  check('revenue follows the named price', /24[,.]000/.test(trkRow), trkRow.replace(/\n/g, ' '));
+  check('revenue follows the named price', /24[\s,.]000/.test(trkRow), trkRow.replace(/\n/g, ' '));
   check('a thin margin is flagged', /Below|Loss/i.test(trkRow), trkRow.replace(/\n/g, ' '));
 
   // Discount and price are two views of one number — setting one clears the other.
@@ -509,7 +534,7 @@ function check(name, cond, detail) {
   check('the target amount can be typed without losing the box',
     (await tgtBox.inputValue()) === '400', await tgtBox.inputValue());
   const verdict = () => p.$eval('.tgt-verdict', (e) => e.innerText.replace(/\n/g, ' '));
-  check('a per-vehicle target is multiplied by the fleet', /48[,.]000/.test(await verdict()), await verdict());
+  check('a per-vehicle target is multiplied by the fleet', /48[\s,.]000/.test(await verdict()), await verdict());
   const tgtRows = () => p.$$eval('#scn-tgt-out tbody tr', (rs) => rs.map((r) =>
     [...r.querySelectorAll('td')].map((t) => t.innerText.split('\n')[0].trim())));
 
@@ -530,7 +555,7 @@ function check(name, cond, detail) {
   await p.waitForTimeout(400);
   await tgtBox.fill('48000');
   await p.waitForTimeout(500);
-  check('a total target is used as given', /48[,.]000/.test(await verdict()), await verdict());
+  check('a total target is used as given', /48[\s,.]000/.test(await verdict()), await verdict());
 
   // Applying writes the allocation into the per-product table.
   await p.selectOption('#scn-tgt-basis', 'cost');
@@ -540,9 +565,9 @@ function check(name, cond, detail) {
   const appliedPrice = await p.inputValue('input[data-scn-price="tracking"]');
   check('Apply writes the allocated unit price into the table',
     Number(appliedPrice) > 0, appliedPrice);
-  const appliedGm = Number((await p.$eval('#scn-summary .scn-tile-lead b', (e) => e.innerText)).replace(/[^0-9.]/g, ''));
+  const appliedGm = parseMoney(await p.$eval('#scn-summary .scn-tile-lead b', (e) => e.innerText));
   check('the applied scenario reaches the target margin', appliedGm > 0 && appliedGm < 100, String(appliedGm));
-  const appliedRev = Number((await p.$eval('#scn-summary .scn-tile:nth-child(2) b', (e) => e.innerText)).replace(/[^0-9.]/g, ''));
+  const appliedRev = parseMoney(await p.$eval('#scn-summary .scn-tile:nth-child(2) b', (e) => e.innerText));
   check('the applied scenario bills exactly the target', Math.abs(appliedRev - 48000) < 1, String(appliedRev));
 
   // The target box is money, so it obeys the display currency like everything else.
@@ -576,7 +601,7 @@ function check(name, cond, detail) {
   // so a figure typed under USD must be read as USD, not as Rands.
   const trkPriceRow = () => p.locator('#scn-tbody tr').filter({ hasText: 'Tracking' }).first().innerText();
   const zarRow = await trkPriceRow();
-  check('revenue is unit price x quantity', /28[,.]440/.test(zarRow), zarRow.replace(/\n/g, ' '));
+  check('revenue is unit price x quantity', /28[\s,.]440/.test(zarRow), zarRow.replace(/\n/g, ' '));
   await p.selectOption('#currency-select', 'USD');
   await p.waitForTimeout(700);
   const usdShown = Number(await priceBox.inputValue());
@@ -584,7 +609,7 @@ function check(name, cond, detail) {
   await priceBox.fill('100');
   await p.waitForTimeout(500);
   const usdRow = await trkPriceRow();
-  check('a price typed under USD is read as USD', /12[,.]000/.test(usdRow), usdRow.replace(/\n/g, ' '));
+  check('a price typed under USD is read as USD', /12[\s,.]000/.test(usdRow), usdRow.replace(/\n/g, ' '));
   await p.selectOption('#currency-select', 'ZAR');
   await p.waitForTimeout(700);
   const backInZar = Number(await priceBox.inputValue());
@@ -608,7 +633,17 @@ function check(name, cond, detail) {
   await p.locator('input[data-scn-price="tracking"]').fill('200');
   await p.waitForTimeout(500);
   const moneyCells = async () => p.evaluate(() => {
-    const n = (t) => Number(String(t).replace(/[^0-9.\-]/g, '')) || 0;
+    // Runs in the page, so it cannot see the Node-side parser: same rule, own copy.
+    const n = (text) => {
+      const t = String(text == null ? '' : text).replace(/[^0-9.,\-]/g, '');
+      if (!t) return 0;
+      const cut = Math.max(t.lastIndexOf('.'), t.lastIndexOf(','));
+      if (cut === -1) return Number(t) || 0;
+      const frac = t.slice(cut + 1);
+      return /^\d{3}$/.test(frac)
+        ? Number(t.replace(/[.,]/g, '')) || 0
+        : Number(t.slice(0, cut).replace(/[.,]/g, '') + '.' + frac) || 0;
+    };
     const out = [];
     document.querySelectorAll('#scn-tbody tr').forEach((r) => {
       const td = [...r.querySelectorAll('td')];
@@ -643,6 +678,54 @@ function check(name, cond, detail) {
     (await p.$eval('#scn-summary .scn-tile-lead b', (e) => e.innerText)) === gmUsd, gmUsd);
   await p.click('#scn-reset');
   await p.waitForTimeout(400);
+  await p.locator('input[data-scn-disc="tracking"]').fill('25');
+  await p.waitForTimeout(450);
+
+  // Hardware in the planner. It is a once-off sale on a much thinner margin
+  // than subscription, and must never be averaged into the monthly figures.
+  await p.click('.tab[data-tab="hardware"]');
+  await p.waitForTimeout(350);
+  await p.locator('#hw-tbody input[data-inc]').first().click();
+  await p.waitForTimeout(600);
+  await p.click('.tab[data-tab="margin"]');
+  await p.waitForTimeout(600);
+  const scnHwRows = () => p.locator('#scn-hw-tbody tr').count();
+  check('hardware on the deal appears in the planner', (await scnHwRows()) > 0, String(await scnHwRows()));
+  const hwGm = async () => parseMoney(await p.$eval('#scn-hw-summary .scn-tile-lead b', (e) => e.innerText));
+  const hwAtList = await hwGm();
+  check('hardware margin at list is the markup margin, not the subscription one',
+    hwAtList > 15 && hwAtList < 25, String(hwAtList));
+  const monthlyBefore = await p.$eval('#scn-summary', (e) => e.innerText);
+
+  // Typing must not drop the box here either.
+  const hwDisc = p.locator('#scn-hw-tbody input[data-scn-hwdisc]').first();
+  await hwDisc.click();
+  for (const ch of '18') { await p.keyboard.type(ch); await p.waitForTimeout(150); }
+  await p.waitForTimeout(500);
+  check('a hardware discount can be typed without losing the box',
+    (await hwDisc.inputValue()) === '18', await hwDisc.inputValue());
+  const hwAfter = await hwGm();
+  check('discounting hardware cuts its margin hard', hwAfter < hwAtList / 2,
+    `${hwAtList}% -> ${hwAfter}%`);
+  check('hardware status is banded against list margin, not a 50% GM floor',
+    /list margin|below cost|halved/i.test(await p.$eval('#scn-hw-tbody tr td:last-child', (e) => e.innerText)),
+    await p.$eval('#scn-hw-tbody tr td:last-child', (e) => e.innerText));
+
+  // The separation that matters: once-off must not move the monthly figures.
+  check('hardware pricing leaves the monthly figures untouched',
+    (await p.$eval('#scn-summary', (e) => e.innerText)) === monthlyBefore);
+  check('hardware totals are labelled once-off',
+    /once-off/i.test(await p.$eval('#scn-hw-summary', (e) => e.innerText)));
+
+  // Installation has a rate but no cost, so it is revenue-only, not profit.
+  const passthru = await p.$eval('#scn-hw-passthru', (e) => e.innerText).catch(() => '');
+  if (passthru) {
+    check('no-cost lines are listed separately', /no cost/i.test(passthru), passthru.slice(0, 90));
+  }
+  await p.click('#scn-reset');
+  await p.waitForTimeout(450);
+  check('reset clears hardware overrides too',
+    (await p.locator('#scn-hw-tbody input[data-scn-hwdisc]').first().inputValue()) === '');
   await p.locator('input[data-scn-disc="tracking"]').fill('25');
   await p.waitForTimeout(450);
 
@@ -758,12 +841,11 @@ function check(name, cond, detail) {
   await cp.waitForTimeout(500);
   const onceOff = await cp.$eval('#r-hardware', (el) => el.innerText);
   check('once-off total appears after picking hardware', /Once-off/i.test(onceOff), onceOff.slice(0, 80));
-  const money = (s) => Number(String(s).replace(/[^0-9.]/g, ''));
-  const beforeIntl = money((await cp.$eval('#r-hardware', (el) => el.innerText)).split('\n').pop());
+  const beforeIntl = parseMoney((await cp.$eval('#r-hardware', (el) => el.innerText)).split('\n').pop());
   await cp.check('#in-intl');
   await cp.waitForTimeout(600);
   const intlTxt = await cp.$eval('#r-hardware', (el) => el.innerText);
-  const afterIntl = money(intlTxt.split('\n').pop());
+  const afterIntl = parseMoney(intlTxt.split('\n').pop());
   check('international delivery adds a shipping line', /shipping/i.test(intlTxt), intlTxt.slice(0, 120));
   check('international delivery raises the once-off total', afterIntl > beforeIntl, `${beforeIntl} -> ${afterIntl}`);
   // the printable quote must carry hardware too
