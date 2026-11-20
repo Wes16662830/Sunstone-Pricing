@@ -498,6 +498,96 @@ P.setConfig(P.getDefaultConfig());
   check('allocateTarget does not mutate the active config', JSON.stringify(P.getConfig()) === before);
 }
 
+console.log('\n=== H5. Hardware scenario (calcHardwareScenario) ===');
+P.setConfig(P.getDefaultConfig());
+{
+  const hwDeal = {
+    vehicles: 120, singleTank: 0, dualTank: 0, trailerQty: 0, outsideSA: false,
+    items: {
+      vehicleGpsInclude: true, printerInclude: true,
+      qtyOverride: { vehicleGps: 120, printer: 20 },
+      installQtyOverride: { gpsInstall: 120 }, extra: {}, installSel: {},
+    },
+  };
+  const hs = (o) => P.calcHardwareScenario({ hardware: hwDeal, ...o });
+  const row = (r, id) => r.rows.find((x) => x.id === id);
+
+  const atList = hs({});
+  const gps = row(atList, 'vehicleGps');
+  // Unit cost must come back out of the marked-up sell price exactly.
+  check('unit cost is recovered from the sell price', Math.abs(gps.unitCost - 639) < 1e-9, String(gps.unitCost));
+  check('list price is cost x (1 + markup)', Math.abs(gps.listPrice - 639 * 1.25) < 1e-9, String(gps.listPrice));
+  check('hardware GM at list is the markup margin',
+    Math.abs(gps.grossMargin - 0.2) < 1e-9, String(gps.grossMargin));
+  check('every line is on the same margin at list',
+    new Set(atList.rows.map((r) => Math.round(r.grossMargin * 1e9))).size === 1);
+  check('blended hardware GM at list is 20%', Math.abs(atList.grossMargin - 0.2) < 1e-9);
+
+  // Overrides, same precedence rule as the subscription planner.
+  const priced = hs({ override: { vehicleGps: { price: 600 } } });
+  check('a price override is used verbatim', row(priced, 'vehicleGps').effectivePrice === 600);
+  check('pricing below cost is a loss', row(priced, 'vehicleGps').grossMargin < 0);
+  check('below cost is flagged as a loss', row(priced, 'vehicleGps').floorStatus === 'loss');
+  const disc = hs({ override: { vehicleGps: { discount: 0.15 } } });
+  check('a discount override applies to list',
+    Math.abs(row(disc, 'vehicleGps').effectivePrice - 798.75 * 0.85) < 1e-9);
+  const both = hs({ override: { vehicleGps: { price: 700, discount: 0.9 } } });
+  check('price beats discount when both are set', row(both, 'vehicleGps').effectivePrice === 700);
+
+  // Thin margins: a modest discount destroys hardware margin, which is the
+  // whole point of showing it.
+  const discGps = row(disc, 'vehicleGps');
+  check('15% off a hardware line leaves under 6% GM',
+    discGps.grossMargin > 0 && discGps.grossMargin < 0.06, String(discGps.grossMargin));
+  check('an undiscounted line keeps its full margin',
+    Math.abs(row(disc, 'printer').grossMargin - 0.2) < 1e-9, String(row(disc, 'printer').grossMargin));
+
+  // Installation and shipping have NO cost in the config. They must be reported
+  // as revenue only and excluded from the margin, never counted as pure profit.
+  check('installation is reported as a no-cost line',
+    atList.noCost.some((r) => r.kind === 'install'), JSON.stringify(atList.noCost.map((r) => r.kind)));
+  check('installation revenue is non-zero', atList.noCostRevenue > 0, String(atList.noCostRevenue));
+  check('installation is NOT counted in hardware revenue',
+    Math.abs(atList.revenue - atList.rows.reduce((s2, r) => s2 + r.revenue, 0)) < 1e-9);
+  check('installation is NOT counted in the gross margin',
+    Math.abs(atList.grossMargin - 0.2) < 1e-9, 'GM would rise if pass-through were counted as profit');
+  check('the once-off invoice DOES include pass-through',
+    Math.abs(atList.onceOffTotal - (atList.revenue + atList.noCostRevenue)) < 1e-9);
+
+  const intl = P.calcHardwareScenario({ hardware: { ...hwDeal, outsideSA: true } });
+  check('international shipping is a no-cost line too',
+    intl.noCost.some((r) => r.kind === 'shipping'));
+  check('shipping does not change the hardware margin',
+    Math.abs(intl.grossMargin - atList.grossMargin) < 1e-9);
+
+  check('breakeven revenue equals total cost', atList.breakevenRevenue === atList.cost);
+
+  // Hostile / empty input.
+  const hostile = [
+    ['no input', undefined],
+    ['empty object', {}],
+    ['no hardware', { hardware: {} }],
+    ['override not an object', { hardware: hwDeal, override: 'nope' }],
+    ['negative price', { hardware: hwDeal, override: { vehicleGps: { price: -50 } } }],
+    ['string price', { hardware: hwDeal, override: { vehicleGps: { price: 'free' } } }],
+    ['discount over 100%', { hardware: hwDeal, override: { vehicleGps: { discount: 5 } } }],
+    ['unknown row id', { hardware: hwDeal, override: { nope: { price: 1 } } }],
+  ];
+  for (const [label, input] of hostile) {
+    let ok = false;
+    try {
+      const r = P.calcHardwareScenario(input);
+      ok = Number.isFinite(r.revenue) && Number.isFinite(r.grossMargin) && r.revenue >= 0
+        && r.rows.every((x) => x.effectivePrice >= 0);
+    } catch (e) { ok = false; }
+    check(`calcHardwareScenario survives ${label}`, ok);
+  }
+
+  const before = JSON.stringify(P.getConfig());
+  hs({ override: { vehicleGps: { price: 1 } } });
+  check('calcHardwareScenario does not mutate the active config', JSON.stringify(P.getConfig()) === before);
+}
+
 console.log('\n=== I. Cross-backend projection parity (server.js vs functions/_shared.js) ===');
 {
   // Compare the two hand-written clientPriceList implementations field-by-field.

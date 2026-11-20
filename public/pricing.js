@@ -694,6 +694,92 @@
   }
 
   // ---------------------------------------------------------------------------
+  // HARDWARE SCENARIO — margin on the once-off sale
+  //
+  // Same idea as calcScenario, for the hardware side of a deal: override a unit
+  // price or a discount per line and see what margin is left.
+  //
+  // Cost basis, and where it runs out:
+  //   HARDWARE has a real cost. Every sell price is cost x (1 + hardwareMarkup),
+  //     so unit cost = unit / (1 + markup) — true for composite rows too (a fuel
+  //     kit is GPS + probes, and the sum of marked-up parts carries the same
+  //     markup). Margin is therefore real.
+  //   INSTALLATION has a RATE and no cost anywhere in the config, and the
+  //     international shipping surcharge is likewise a charge with no cost
+  //     behind it. Their margin is UNKNOWABLE from the configuration, so they
+  //     are reported as revenue only and left out of the gross-margin figure.
+  //     Treating them as pure profit would overstate the deal.
+  //
+  // Hardware is a ONCE-OFF sale and subscription is monthly: the two are never
+  // blended into one margin here, because R/month and R once are not the same
+  // unit and an average of them means nothing.
+  // ---------------------------------------------------------------------------
+  function calcHardwareScenario(input) {
+    const inp = input || {};
+    const hw = calcHardware(inp.hardware || {});
+    const markup = activeConfig.hardwareMarkup;
+    const ov = (inp.override && typeof inp.override === 'object') ? inp.override : {};
+    const set = (v) => v !== undefined && v !== null && v !== '';
+
+    const rows = hw.rows.filter((r) => r.include && r.qty > 0).map((r) => {
+      const listUnit = r.unit;
+      const unitCost = (1 + markup) ? listUnit / (1 + markup) : 0;
+      const o = ov[r.id] || {};
+      let effective = listUnit;
+      let source = 'auto';
+      if (set(o.price)) { effective = Math.max(0, Number(o.price) || 0); source = 'price'; }
+      else if (set(o.discount)) { effective = Math.max(0, listUnit * (1 - (Number(o.discount) || 0))); source = 'discount'; }
+
+      const revenue = effective * r.qty;
+      const cost = unitCost * r.qty;
+      const contribution = revenue - cost;
+      const grossMargin = revenue ? contribution / revenue : 0;
+      // At list every item sits on the same margin, set by the markup; these are
+      // the prices that matter once you start discounting.
+      const listGM = listUnit ? (listUnit - unitCost) / listUnit : 0;
+      return {
+        id: r.id, desc: r.desc, catalogKey: r.catalogKey, qty: r.qty,
+        listPrice: listUnit, unitCost, effectivePrice: effective, source,
+        discount: listUnit ? 1 - effective / listUnit : 0,
+        revenue, cost, contribution, grossMargin, listGM,
+        breakeven: unitCost,
+        floorStatus: effective < unitCost ? 'loss'
+          : grossMargin < listGM / 2 ? 'below50' : grossMargin < listGM ? 'below60' : 'healthy',
+      };
+    });
+
+    // Revenue with no cost behind it in the config. Reported, never counted as margin.
+    const noCost = [];
+    hw.installRows.filter((r) => r.subtotal > 0).forEach((r) => {
+      noCost.push({ id: r.id, desc: r.desc, qty: r.qty, unit: r.rate, revenue: r.subtotal, kind: 'install' });
+    });
+    if (hw.shippingSurcharge > 0) {
+      noCost.push({
+        id: 'intlShipping', kind: 'shipping', qty: null, unit: null,
+        desc: 'International shipping & customs (' + Math.round(activeConfig.intlShippingSurcharge * 1000) / 10 + '%)',
+        revenue: hw.shippingSurcharge,
+      });
+    }
+
+    const revenue = rows.reduce((s, r) => s + r.revenue, 0);
+    const cost = rows.reduce((s, r) => s + r.cost, 0);
+    const listRevenue = rows.reduce((s, r) => s + r.listPrice * r.qty, 0);
+    const noCostRevenue = noCost.reduce((s, r) => s + r.revenue, 0);
+
+    return {
+      markup, rows, noCost,
+      revenue, cost, contribution: revenue - cost,
+      grossMargin: revenue ? (revenue - cost) / revenue : 0,
+      listRevenue,
+      discount: listRevenue ? (listRevenue - revenue) / listRevenue : 0,
+      noCostRevenue,
+      // The whole once-off invoice, margin-bearing lines and pass-through alike.
+      onceOffTotal: revenue + noCostRevenue,
+      breakevenRevenue: cost,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // TARGET ALLOCATION — "the client will pay R X in total; make it work"
   //
   // Works backwards from a total the client has named and splits it across the
@@ -925,6 +1011,6 @@
     calcInternalMargin, buildClientQuote, calcDeal, calcScenario,
     // client-facing hardware (margin-safe)
     clientHardwareOptions, clientHardwareInput, clientHardwareProjection,
-    allocateTarget,
+    allocateTarget, calcHardwareScenario,
   };
 });

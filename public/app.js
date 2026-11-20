@@ -44,7 +44,21 @@ const fmtR = (n, dp = 2) => curSym() + ' ' + cur(n, dp);
 const fxToDisplay = (zar) => (Number(zar) || 0) / fxDivisor();
 const fxToZar = (shown) => (Number(shown) || 0) * fxDivisor();
 // Trim to 2dp without trailing zeros, so an input shows 200 rather than 200.00.
-const fxInputValue = (zar) => String(Math.round(fxToDisplay(zar) * 100) / 100);
+// Unit prices need more than 2dp or they stop reconciling with the totals
+// beside them. Tracking's list price is R276.666… — at 2dp that reads R276.67,
+// and 276.67 x 120 vehicles is R33,200.40 against a true R33,200.00. Converting
+// magnifies it: in USD the same line shows a unit price of 14.95 next to
+// revenue of 1,794.59, while 14.95 x 120 is 1,794.00, 59c adrift.
+// So: UNIT prices print at DP_UNIT, totals stay at 2dp (real money, real cents).
+const DP_UNIT = 4;
+const curU = (n) => cur(n, DP_UNIT);
+const fmtRU = (n) => curSym() + ' ' + curU(n);
+// The scenario planner's editable price box: show the stored figure as it
+// really is, so switching currency and back cannot quietly shave it.
+const fxInputValue = (zar) => {
+  const v = fxToDisplay(zar);
+  return String(Math.round(v * 1e6) / 1e6);
+};
 
 // --- Deal state -------------------------------------------------------------
 function defaultDeal() {
@@ -206,8 +220,8 @@ function renderSubscription() {
       <td>${l.name}${excl ? ` <span class="note" style="margin:0">(${excl})</span>` : ''}</td>
       <td>${l.billingLabel}</td>
       <td class="num">${l.qty}</td>
-      <td class="num">${cur(l.listPrice)}</td>
-      <td class="num">${cur(l.effectivePrice)}</td>
+      <td class="num">${curU(l.listPrice)}</td>
+      <td class="num">${curU(l.effectivePrice)}</td>
       <td class="num">${cur(l.monthly)}</td>
       <td class="num">${cur(l.annual)}</td>`;
     tb.appendChild(tr);
@@ -305,7 +319,7 @@ function renderHardware() {
         <td><input type="checkbox" data-extra-key="${r.catalogKey}" ${r.include ? 'checked' : ''}></td>
         <td>${r.desc}</td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-extra-qty="${r.catalogKey}" value="${r.qty}"></td>
-        <td class="num">${cur(r.unit)}</td>
+        <td class="num">${curU(r.unit)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
     } else if (r.custom) {
       const i = Number(r.id.split(':')[1]);
@@ -313,7 +327,7 @@ function renderHardware() {
         <td><button class="btn cfg-del" data-custom-del="${i}" title="Remove">✕</button></td>
         <td><select class="cell-input" data-custom-key="${i}" style="min-width:180px">${catOpts(r.catalogKey)}</select> <span class="note" style="margin:0">one-off</span></td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-custom-qty="${i}" value="${r.qty}"></td>
-        <td class="num">${cur(r.unit)}</td>
+        <td class="num">${curU(r.unit)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
     } else {
       if (!r.include) tr.className = 'row-off';
@@ -321,7 +335,7 @@ function renderHardware() {
         <td><input type="checkbox" data-inc="${includeKey[r.id]}" ${r.include ? 'checked' : ''}></td>
         <td>${r.desc}</td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-base-qty="${r.id}" value="${r.qty}"></td>
-        <td class="num">${cur(r.unit)}</td>
+        <td class="num">${curU(r.unit)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
     }
     tb.appendChild(tr);
@@ -370,7 +384,7 @@ function renderHardware() {
       tr.innerHTML = `
         <td><input type="checkbox" data-instsel-key="${r.installKey}" ${r.include ? 'checked' : ''}> ${r.desc}</td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-instsel-qty="${r.installKey}" value="${r.qty}"></td>
-        <td class="num">${cur(r.rate)}</td>
+        <td class="num">${curU(r.rate)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
     } else if (r.custom) {
       const i = Number(r.id.split(':')[1]);
@@ -385,7 +399,7 @@ function renderHardware() {
       tr.innerHTML = `
         <td>${r.desc}</td>
         <td class="num"><input class="cell-input num" type="number" min="0" data-baseinst-qty="${r.id}" value="${r.qty}"></td>
-        <td class="num">${cur(r.rate)}</td>
+        <td class="num">${curU(r.rate)}</td>
         <td class="num">${cur(r.subtotal)}</td>`;
     }
     itb.appendChild(tr);
@@ -436,7 +450,7 @@ function renderImplementation() {
       <td>${l.desc}</td>
       <td class="num"><input class="cell-input num" type="number" min="0" step="1" data-impl="${i}" data-f="hours" value="${l.hours}"></td>
       <td><input type="checkbox" data-impl="${i}" data-f="senior" ${l.senior ? 'checked' : ''}></td>
-      <td class="num">${cur(l.rate, 0)}</td>
+      <td class="num">${curU(l.rate)}</td>
       <td class="num"><input class="cell-input num" type="number" min="0" max="100" step="1" data-impl="${i}" data-f="discount" value="${Math.round(l.discount * 100)}"></td>
       <td class="num">${cur(l.total)}</td>
       <td>${status}</td>`;
@@ -498,11 +512,11 @@ function renderRental() {
 function renderQuote() {
   const q = result.clientQuote;
   const subRows = q.subscriptionItems.map((i) => `
-    <tr><td>${i.product}</td><td>${i.billingLabel}</td><td class="num">${i.qty}</td><td class="num">${cur(i.unitPrice)}</td><td class="num">${cur(i.monthly)}</td><td class="num">${cur(i.annual)}</td></tr>`).join('');
+    <tr><td>${i.product}</td><td>${i.billingLabel}</td><td class="num">${i.qty}</td><td class="num">${curU(i.unitPrice)}</td><td class="num">${cur(i.monthly)}</td><td class="num">${cur(i.annual)}</td></tr>`).join('');
   const implRows = q.implementationItems.map((i) => `
     <tr><td>${i.desc}</td><td class="num">${i.hours}</td><td class="num">${cur(i.rate, 0)}</td><td class="num">${i.discount ? pct(i.discount, 0) : ''}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
   const hwRows = q.hardwareItems.map((i) => `
-    <tr><td>${i.desc}</td><td class="num">${i.qty ?? ''}</td><td class="num">${i.unit != null ? cur(i.unit) : ''}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
+    <tr><td>${i.desc}</td><td class="num">${i.qty ?? ''}</td><td class="num">${i.unit != null ? curU(i.unit) : ''}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
 
   document.getElementById('quote-doc').innerHTML = `
     <h1>SUNSTONE LOGISTIC SYSTEMS</h1>
@@ -839,7 +853,7 @@ function renderMargin() {
       <td style="text-align:center"><input type="checkbox" data-margin-sel="${r.key}" ${r.selected ? 'checked' : ''}
           title="Include ${escapeHtml(r.name)} in the quote — the same tick as on the Subscription tab"></td>
       <td class="num">${cur(r.revenue)}</td>
-      <td class="num">${cur(r.marginalCost, 0)}</td>
+      <td class="num">${curU(r.marginalCost)}</td>
       <td class="num">${cur(r.monthlyCost)}</td>
       <td class="num">${cur(r.contribution)}</td>
       <td class="num">${pct(r.grossMargin)}</td>
@@ -881,10 +895,10 @@ function renderMargin() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${r.name}<span class="row-basis">${escapeHtml(r.billingLabel || '')}</span></td>
-      <td class="num">${cur(r.marginalCost, 0)}</td>
-      <td class="num">${cur(r.floor50)}</td>
-      <td class="num">${cur(r.floor60)}</td>
-      <td class="num">${cur(r.effectivePrice)}</td>
+      <td class="num">${curU(r.marginalCost)}</td>
+      <td class="num">${curU(r.floor50)}</td>
+      <td class="num">${curU(r.floor60)}</td>
+      <td class="num">${curU(r.effectivePrice)}</td>
       <td style="color:${color}">${r.floorStatus}</td>`;
     ftb.appendChild(tr);
   });
@@ -909,6 +923,7 @@ function ensureScenario() {
   if (!('bundleOverride' in d)) d.bundleOverride = null;
   if (!('volumeOverride' in d)) d.volumeOverride = null;
   if (!('includeStepCost' in d)) d.includeStepCost = false;
+  if (!d.hardwareOverride || typeof d.hardwareOverride !== 'object') d.hardwareOverride = {};
   if (!d.target || typeof d.target !== 'object') {
     d.target = { amount: null, mode: 'perVehicle', basis: 'cost' };
   }
@@ -935,6 +950,18 @@ const SCN_STATUS = {
   below60:  { label: '⚠ Below 60%', color: 'var(--warn)' },
   healthy:  { label: '✓ Healthy', color: 'var(--good)' },
   'n/a':    { label: '—', color: 'var(--text-mute)' },
+};
+
+// Hardware floors are NOT the subscription ones. Subscription is measured
+// against fixed 50%/60% gross-margin floors; hardware only ever earns the
+// markup (20% at a 25% markup), so "below 50%" would be nonsense here. These
+// bands are relative to the margin the item carries at list.
+const SCN_HW_STATUS = {
+  loss:    { label: '🚨 Below cost', color: 'var(--bad)' },
+  below50: { label: '🚨 Margin more than halved', color: 'var(--bad)' },
+  below60: { label: '⚠ Under list margin', color: 'var(--warn)' },
+  healthy: { label: '✓ Full list margin', color: 'var(--good)' },
+  'n/a':   { label: '—', color: 'var(--text-mute)' },
 };
 
 function gmColor(gm) {
@@ -1015,7 +1042,7 @@ function renderScenario() {
     const st = SCN_STATUS[r.floorStatus] || SCN_STATUS['n/a'];
     const cell = (n) => tr.querySelector(`[data-c="${n}"]`);
     cell('qty').textContent = r.qty;
-    cell('list').textContent = cur(r.listPrice);
+    cell('list').textContent = curU(r.listPrice);
     cell('rev').textContent = cur(r.revenue);
     cell('cost').innerHTML = cur(r.monthlyCost) +
       (r.stepMonthly && sc.includeStepCost ? `<span class="scn-basis">incl. ${cur(r.stepMonthly, 0)} step</span>` : '');
@@ -1063,16 +1090,17 @@ function renderScenario() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${escapeHtml(r.name)}</td>
-      <td class="num" style="color:var(--bad)">${cur(r.breakeven)}</td>
-      <td class="num">${cur(r.floor50)}</td>
-      <td class="num">${cur(r.floor60)}</td>
-      <td class="num">${cur(r.targetPrice)}</td>
-      <td class="num" style="color:${gmColor(r.grossMargin)};font-weight:600">${cur(r.effectivePrice)}</td>
+      <td class="num" style="color:var(--bad)">${curU(r.breakeven)}</td>
+      <td class="num">${curU(r.floor50)}</td>
+      <td class="num">${curU(r.floor60)}</td>
+      <td class="num">${curU(r.targetPrice)}</td>
+      <td class="num" style="color:${gmColor(r.grossMargin)};font-weight:600">${curU(r.effectivePrice)}</td>
       <td class="num">${pct(r.maxDiscount50)}</td>`;
     ftb.appendChild(tr);
   });
 
   renderTarget();
+  renderHardwareScenario();
   renderPinned();
 }
 
@@ -1083,7 +1111,7 @@ function pinnedNote(p) {
   if (!Array.isArray(p.bits)) return p.note || 'schedule pricing';
   if (!p.bits.length) return 'schedule pricing';
   return p.bits.map((b) => {
-    if (b.t === 'price') return `${b.label} @ ${fmtR(b.zar)}/unit`;
+    if (b.t === 'price') return `${b.label} @ ${fmtRU(b.zar)}/unit`;
     if (b.t === 'disc') return `${b.label} \u2212${pct(b.v)}`;
     if (b.t === 'pct') return `${b.label} ${pct(b.v)}`;
     return b.label;
@@ -1150,7 +1178,7 @@ function renderTarget() {
       <td>${escapeHtml(r.name)}<span class="scn-basis">${escapeHtml(r.billingLabel)}</span></td>
       <td class="num">${r.qty}</td>
       <td class="num">${pct(r.share)}</td>
-      <td class="num">${cur(r.unitPrice)}</td>
+      <td class="num">${curU(r.unitPrice)}</td>
       <td class="num">${pct(r.discount)}</td>
       <td class="num">${cur(r.revenue)}</td>
       <td class="num" style="color:${gmColor(sr.grossMargin)};font-weight:600">${pct(sr.grossMargin)}</td>
@@ -1192,6 +1220,105 @@ function applyTarget() {
   sc.productOverride = {};
   Object.keys(a.prices).forEach((k) => { sc.productOverride[k] = { price: a.prices[k], discount: null }; });
   recompute();
+}
+
+// Hardware margin, kept apart from the subscription figures above. Hardware is
+// a once-off sale and subscription is monthly: R/month and R once are not the
+// same unit, so they are never averaged into one margin.
+function hardwareScenarioResult() {
+  const sc = ensureScenario();
+  return P.calcHardwareScenario({
+    hardware: { ...(deal.hardware || {}), vehicles: deal.vehicles },
+    override: sc.hardwareOverride,
+  });
+}
+
+function renderHardwareScenario() {
+  const tb = document.getElementById('scn-hw-tbody');
+  if (!tb) return;
+  const sc = ensureScenario();
+  const h = hardwareScenarioResult();
+  const live = document.activeElement;
+
+  document.getElementById('scn-hw-note').innerHTML =
+    `Hardware sells at cost + <strong>${pct(h.markup)}</strong> markup, which is <strong>${pct(h.rows.length ? h.rows[0].listGM : 0)}</strong> gross margin at list — far thinner than subscription, so a discount here bites quickly. ` +
+    'Installation and shipping have a rate but <strong>no cost in the configuration</strong>, so their margin cannot be worked out; they are listed below as revenue only and left out of the GM.';
+
+  document.getElementById('scn-hw-empty').style.display = h.rows.length ? 'none' : '';
+
+  const sig = h.rows.map((r) => r.id).join('|') + '#' + displayCurrency;
+  if (tb.dataset.sig !== sig) {
+    tb.dataset.sig = sig;
+    tb.innerHTML = h.rows.map((r) => `
+      <tr data-scn-hwrow="${escapeHtml(r.id)}">
+        <td>${escapeHtml(r.desc)}</td>
+        <td class="num" data-c="qty"></td>
+        <td class="num" data-c="cost1"></td>
+        <td class="num" data-c="list"></td>
+        <td class="num"><input class="cell-input num scn-in" type="number" min="0" max="100" step="0.5"
+            data-scn-hwdisc="${escapeHtml(r.id)}"></td>
+        <td class="num"><input class="cell-input num scn-in" type="number" min="0" step="any"
+            data-scn-hwprice="${escapeHtml(r.id)}"></td>
+        <td class="num" data-c="rev"></td>
+        <td class="num" data-c="cost"></td>
+        <td class="num" data-c="contrib"></td>
+        <td class="num" data-c="gm"></td>
+        <td data-c="status"></td>
+      </tr>`).join('');
+  }
+  h.rows.forEach((r) => {
+    const tr = tb.querySelector(`tr[data-scn-hwrow="${CSS.escape(r.id)}"]`);
+    if (!tr) return;
+    const o = sc.hardwareOverride[r.id] || {};
+    const st = SCN_HW_STATUS[r.floorStatus] || SCN_HW_STATUS['n/a'];
+    const cell = (n) => tr.querySelector(`[data-c="${n}"]`);
+    cell('qty').textContent = r.qty;
+    cell('cost1').textContent = curU(r.unitCost);
+    cell('list').textContent = curU(r.listPrice);
+    cell('rev').textContent = cur(r.revenue);
+    cell('cost').textContent = cur(r.cost);
+    cell('contrib').textContent = cur(r.contribution);
+    cell('gm').textContent = pct(r.grossMargin);
+    cell('gm').style.color = r.grossMargin < 0 ? 'var(--bad)' : r.grossMargin < r.listGM ? 'var(--warn)' : 'var(--good)';
+    cell('gm').style.fontWeight = '600';
+    cell('status').textContent = st.label;
+    cell('status').style.color = st.color;
+    const di = tr.querySelector('[data-scn-hwdisc]');
+    const pi = tr.querySelector('[data-scn-hwprice]');
+    di.placeholder = (r.discount * 100).toFixed(1);
+    pi.placeholder = fxInputValue(r.listPrice);
+    if (di !== live) di.value = (o.discount === undefined || o.discount === null) ? '' : String(Math.round(o.discount * 1000) / 10);
+    if (pi !== live) pi.value = (o.price === undefined || o.price === null) ? '' : fxInputValue(o.price);
+  });
+
+  // Totals, clearly once-off.
+  const sum = document.getElementById('scn-hw-summary');
+  sum.innerHTML = h.rows.length ? `
+    <div class="scn-tile scn-tile-lead">
+      <span>Hardware GM</span>
+      <b style="color:${h.grossMargin < 0 ? 'var(--bad)' : h.grossMargin < h.rows[0].listGM ? 'var(--warn)' : 'var(--good)'}">${pct(h.grossMargin)}</b>
+      <small>${pct(h.discount)} off list</small>
+    </div>
+    <div class="scn-tile"><span>Hardware revenue</span><b>${fmtR(h.revenue)}</b><small>once-off</small></div>
+    <div class="scn-tile"><span>Hardware cost</span><b>${fmtR(h.cost)}</b><small>at ${pct(h.markup)} markup</small></div>
+    <div class="scn-tile"><span>Contribution</span><b>${fmtR(h.contribution)}</b><small>once-off</small></div>
+    <div class="scn-tile"><span>Once-off invoice</span><b>${fmtR(h.onceOffTotal)}</b><small>incl. ${fmtR(h.noCostRevenue)} pass-through</small></div>` : '';
+
+  // Pass-through lines: revenue we charge with no cost recorded against it.
+  const pt = document.getElementById('scn-hw-passthru');
+  pt.innerHTML = h.noCost.length ? `
+    <h3 class="scn-h3">Charged, but no cost configured</h3>
+    <p class="note">These carry a rate with no cost behind it, so no margin can be calculated for them. They are in the once-off invoice above but <strong>not</strong> in the hardware GM — add costs in Config if you want them to count.</p>
+    <table class="data">
+      <thead><tr><th>Line</th><th class="num">Qty</th><th class="num">Rate <span class="scn-unit">/unit</span> ${escapeHtml(curSym() + ' ' + displayCurrency)}</th><th class="num">Revenue ${escapeHtml(curSym() + ' ' + displayCurrency)}</th></tr></thead>
+      <tbody>${h.noCost.map((r) => `
+        <tr><td>${escapeHtml(r.desc)}</td>
+          <td class="num">${r.qty == null ? '—' : r.qty}</td>
+          <td class="num">${r.unit == null ? '—' : curU(r.unit)}</td>
+          <td class="num">${cur(r.revenue)}</td></tr>`).join('')}
+        <tr class="total"><td>Total pass-through</td><td></td><td></td><td class="num">${cur(h.noCostRevenue)}</td></tr>
+      </tbody>
+    </table>` : '';
 }
 
 function renderPinned() {
@@ -1298,11 +1425,25 @@ function wireScenario() {
     renderTarget();
   });
   document.getElementById('scn-tgt-apply').addEventListener('click', applyTarget);
+  document.getElementById('scn-hw-tbody').addEventListener('input', (e) => {
+    const sc = ensureScenario();
+    const dk = e.target.dataset.scnHwdisc;
+    const pk = e.target.dataset.scnHwprice;
+    const key = dk || pk;
+    if (!key) return;
+    const o = sc.hardwareOverride[key] || (sc.hardwareOverride[key] = {});
+    const v = e.target.value;
+    if (dk) { o.discount = v === '' ? null : (Number(v) || 0) / 100; o.price = null; }
+    else { o.price = v === '' ? null : Math.max(0, fxToZar(v)); o.discount = null; }
+    if (o.discount === null && o.price === null) delete sc.hardwareOverride[key];
+    renderHardwareScenario();
+  });
   document.getElementById('scn-pin').addEventListener('click', pinScenario);
   document.getElementById('scn-reset').addEventListener('click', () => {
     const sc = ensureScenario();
     sc.bundleOverride = null; sc.volumeOverride = null;
     sc.productOverride = {}; sc.includeStepCost = false;
+    sc.hardwareOverride = {};
     sc.target = { amount: null, mode: 'perVehicle', basis: 'cost' };
     renderScenario();
   });
