@@ -223,7 +223,7 @@ function renderQuoteDoc(q) {
         <td class="num">${cur(i.unitPrice)}</td><td class="num">${cur(i.monthly)}</td><td class="num">${cur(i.annual)}</td></tr>`).join('');
   const today = new Date().toISOString().slice(0, 10);
   document.getElementById('quote-doc').innerHTML = `
-    <h2 style="font-size:19px;letter-spacing:1px;margin:0 0 2px;color:#1a1a1a">SUNSTONE LOGISTIC SYSTEMS</h2>
+    <img class="doc-logo" src="/logo-light.png" alt="Sunstone Logistic Systems">
     <div style="color:#666;font-size:12px;margin-bottom:16px">Subscription Pricing Estimate</div>
     <div class="qmeta">
       <div><span>Prepared for:</span> <strong>${esc(state.customerName || '—')}</strong></div>

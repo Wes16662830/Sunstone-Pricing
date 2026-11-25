@@ -16,7 +16,8 @@
     .topbar { display:flex; align-items:center; gap:16px; padding:14px 22px; background:var(--panel);
       border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
     .brand { display:flex; align-items:center; gap:10px; flex:1; }
-    .logo { font-size:26px; color:var(--accent); }
+    .brand-logo { display:block; height:30px; width:auto; }
+    .brand-rule { width:1px; height:26px; background:var(--line); display:inline-block; }
     .brand-title { font-weight:700; font-size:15px; }
     .brand-sub { font-size:11px; color:var(--dim); }
     .topbar select, .btn {
@@ -113,9 +114,10 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <span class="logo">◧</span>
+      <img class="brand-logo" src="/logo-light.png" alt="Sunstone Logistic Systems" width="1061" height="265">
+      <span class="brand-rule" aria-hidden="true"></span>
       <div>
-        <div class="brand-title">Sunstone Pricing</div>
+        <div class="brand-title">Pricing</div>
         <div class="brand-sub">Self-service subscription &amp; hardware quote</div>
       </div>
     </div>

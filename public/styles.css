@@ -461,3 +461,23 @@ input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); c
    under a product name so "per unit" figures are comparable across rows. */
 .cur-tag { font-weight: 400; color: var(--text-mute); letter-spacing: 0; }
 .row-basis { display: block; font-size: 10.5px; color: var(--text-mute); margin-top: 1px; }
+
+/* ===== Brand ============================================================= */
+/* The supplied logo has a WHITE wordmark, so it only reads on a dark ground.
+   applyTheme() swaps src to the ink version for the light theme; printed
+   documents and the client pages are always "paper", so they use the ink one
+   directly. */
+.brand-logo { display: block; height: 30px; width: auto; flex: none; }
+.brand-rule { width: 1px; height: 26px; background: var(--line); flex: none; }
+.brand { gap: var(--s3); }
+
+/* Letterhead on anything that gets printed or sent. */
+.doc-logo { display: block; height: 34px; width: auto; margin: 0 0 var(--s3); }
+.doc-logo-lg { height: 48px; margin-bottom: var(--s5); }
+@media print {
+  /* Background graphics are off by default in most browsers, but an <img> still
+     prints — keep the letterhead from being dropped or resized. */
+  .doc-logo { height: 30px !important; }
+  .doc-logo-lg { height: 44px !important; }
+}
+@media (max-width: 700px) { .brand-logo { height: 24px; } .brand-rule { display: none; } }

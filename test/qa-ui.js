@@ -140,6 +140,36 @@ function check(name, cond, detail) {
     (await p.locator('#sub-tbody input[type=checkbox]:checked').count()) === 0);
   check('Clear all leaves the fleet size alone', (await p.inputValue('#in-vehicles')) === '10');
 
+  console.log('\n=== 2a2. Branding ===');
+  // The supplied logo has a WHITE wordmark, so it is invisible on a light
+  // ground. The app must show the ink version whenever the theme is light.
+  const logoFor = async () => p.$eval('#brand-logo', (e) => ({
+    src: e.getAttribute('src'), loaded: e.complete && e.naturalWidth > 0,
+  }));
+  const themeNow = () => p.getAttribute('html', 'data-theme');
+  let lg = await logoFor();
+  check('the topbar logo image actually loads', lg.loaded, JSON.stringify(lg));
+  for (let i = 0; i < 2; i++) {
+    const t = await themeNow();
+    lg = await logoFor();
+    check(`${t} theme uses the matching logo`,
+      lg.src === (t === 'light' ? '/logo-light.png' : '/logo.png'), `${t} -> ${lg.src}`);
+    check(`${t} theme logo loads`, lg.loaded);
+    await p.click('#btn-theme');
+    await p.waitForTimeout(400);
+  }
+  // The printed quote is paper in both themes, so its letterhead is always ink.
+  await p.click('.tab[data-tab="quote"]');
+  await p.waitForTimeout(400);
+  const docLogo = await p.$eval('#quote-doc .doc-logo', (e) => ({
+    src: e.getAttribute('src'), loaded: e.complete && e.naturalWidth > 0,
+  })).catch(() => null);
+  check('the printed quote carries a letterhead', !!docLogo && docLogo.loaded, JSON.stringify(docLogo));
+  check('the letterhead uses the ink logo, since the page is paper',
+    docLogo && docLogo.src === '/logo-light.png', docLogo && docLogo.src);
+  await p.click('.tab[data-tab="subscription"]');
+  await p.waitForTimeout(250);
+
   console.log('\n=== 2b2. Unit prices reconcile with their totals ===');
   // A unit price printed at 2dp stops agreeing with the total beside it.
   // Tracking lists at R276.666… — "276.67" x 120 vehicles is R33,200.40 against

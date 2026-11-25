@@ -381,7 +381,9 @@ async function handleApi(req, res) {
 }
 
 // --- router ---------------------------------------------------------------
-const OPEN_PATHS = new Set(['/login', '/login.html', '/favicon.ico', '/quote-login', '/quote-login.html']);
+const OPEN_PATHS = new Set(['/login', '/login.html', '/favicon.ico', '/quote-login', '/quote-login.html',
+  // Brand images: the sign-in pages are pre-auth, so a gated logo renders broken.
+  '/logo.png', '/logo-light.png', '/logo-mark.png']);
 // Client area assets — reachable with the client cookie (or an internal session).
 const CLIENT_ASSETS = new Set(['/quote', '/quote.html', '/quote.js', '/prices', '/prices.html', '/prices.js', '/styles.css']);
 const server = http.createServer((req, res) => {
