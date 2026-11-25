@@ -19,6 +19,9 @@ const OPEN_PATHS = new Set([
   '/login', '/login.html', '/favicon.ico',
   '/quote-login', '/quote-login.html',
   '/client-access',
+  // Brand images. The sign-in pages are pre-auth, so a gated logo renders
+  // broken on the one screen every user sees first. They carry no data.
+  '/logo.png', '/logo-light.png', '/logo-mark.png',
 ]);
 // Client area static assets (client cookie — or internal — required). These
 // carry no cost/margin data. Everything else falls through to the internal gate.

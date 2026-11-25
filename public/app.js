@@ -519,7 +519,7 @@ function renderQuote() {
     <tr><td>${i.desc}</td><td class="num">${i.qty ?? ''}</td><td class="num">${i.unit != null ? curU(i.unit) : ''}</td><td class="num">${cur(i.total)}</td></tr>`).join('');
 
   document.getElementById('quote-doc').innerHTML = `
-    <h1>SUNSTONE LOGISTIC SYSTEMS</h1>
+    <img class="doc-logo" src="/logo-light.png" alt="Sunstone Logistic Systems">
     <div class="q-sub">Solution Quotation — Subscription, Implementation &amp; Hardware</div>
     <div class="q-meta">
       <div><span>Prepared for:</span> <strong>${escapeHtml(deal.customerName || '—')}</strong></div>
@@ -742,6 +742,7 @@ function renderProposalDoc() {
 
   host.innerHTML = `
     <div class="prop-cover">
+      <img class="doc-logo doc-logo-lg" src="/logo-light.png" alt="Sunstone Logistic Systems">
       <div class="prop-kicker">${escapeHtml(T.COVER.kicker)}</div>
       <h1 class="prop-title">${escapeHtml(T.COVER.title)}</h1>
       <div class="prop-subtitle">${escapeHtml(T.COVER.subtitle)}</div>
@@ -1564,6 +1565,11 @@ function currentTheme() {
 function applyTheme(theme) {
   const t = theme === 'light' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', t);
+  // The wordmark is white on the supplied logo, so it needs the ink version on
+  // a light ground. Swapping src (rather than showing/hiding two <img>) means
+  // only the one actually displayed is ever downloaded.
+  const lg = document.getElementById('brand-logo');
+  if (lg) lg.src = t === 'light' ? '/logo-light.png' : '/logo.png';
   try { localStorage.setItem('sps_theme', t); } catch (e) { /* no localStorage */ }
   const btn = document.getElementById('btn-theme');
   if (btn) {

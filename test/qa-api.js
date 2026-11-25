@@ -316,6 +316,24 @@ function cookieFrom(res, name) {
   r = await req('/api/client-links', { cookie: staffCookie });
   check('purge left the other link intact', r.json.some((l) => l.id === link.id));
 
+  console.log('\n=== 10b. Brand images are reachable pre-auth ===');
+  // The sign-in pages are the one screen every user sees before they have a
+  // cookie. A gated logo renders broken there, so these must be open — and they
+  // carry no data, unlike every other asset the middleware protects.
+  for (const f of ['/logo.png', '/logo-light.png', '/logo-mark.png']) {
+    r = await req(f);
+    check(`${f} served without any session`, r.status === 200, `got ${r.status}`);
+    r = await req(f, { cookie: clientCookie });
+    check(`${f} served to a client session`, r.status === 200, `got ${r.status}`);
+    r = await req(f, { cookie: staffCookie });
+    check(`${f} served to a staff session`, r.status === 200, `got ${r.status}`);
+  }
+  // Opening the logos must not have opened anything else.
+  r = await req('/app.js');
+  check('opening the logos did not open app.js', r.status !== 200, `got ${r.status}`);
+  r = await req('/pricing.js');
+  check('opening the logos did not open pricing.js', r.status !== 200, `got ${r.status}`);
+
   console.log('\n=== 11. METHOD / MALFORMED handling ===');
   r = await req('/api/client-links', { method: 'DELETE', cookie: staffCookie });
   check('DELETE /api/client-links (no id) not 500', r.status !== 500, `got ${r.status}`);
